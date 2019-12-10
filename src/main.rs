@@ -29,10 +29,10 @@ fn main() {
 
     let mut ct = vec![0; 1541];
     unsafe {
-        let mut ct_len = ct.len() as u64;
+        let mut ct_len = ct.len();
         round5::crypto_encrypt(ct.as_mut_ptr(),
                                &mut ct_len,
-                               msg.as_ptr(), msg.len() as u64,
+                               msg.as_ptr(), msg.len(),
                                pk.as_ptr(),
                                enc_coins.as_ptr());
     }
@@ -42,15 +42,15 @@ fn main() {
     let mut recovered = vec![0; 4096];
     unsafe {
 
-        let mut m_len = recovered.len() as u64;
+        let mut m_len = recovered.len();
 
         round5::crypto_encrypt_open(recovered.as_mut_ptr(), &mut m_len,
-                                    ct.as_ptr(), ct.len() as u64,
+                                    ct.as_ptr(), ct.len(),
                                     sk.as_ptr());
 
         recovered.truncate(m_len as usize);
     }
 
     assert_eq!(recovered.to_hex(), msg.to_hex());
-    println!("hi");
+    println!("ok");
 }

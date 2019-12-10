@@ -1,8 +1,8 @@
 #![allow(dead_code, mutable_transmutes, non_camel_case_types, non_snake_case,
          non_upper_case_globals, unused_assignments, unused_mut)]
-pub type uint8_t = libc::c_uchar;
-pub type uint16_t = libc::c_ushort;
-pub type size_t = libc::c_ulonglong;
+pub type u8 = libc::c_uchar;
+pub type u16 = libc::c_ushort;
+pub type usize = libc::c_ulonglong;
 pub type int16_t = libc::c_short;
 /*
  * Copyright (c) 2018, Koninklijke Philips N.V.
@@ -31,11 +31,11 @@ pub type int16_t = libc::c_short;
 //#include <stdio.h>
 #[no_mangle]
 pub unsafe extern "C" fn print_hex(mut var: *const libc::c_char,
-                                   mut data: *const uint8_t,
-                                   nr_elements: size_t,
-                                   element_size: size_t) {
+                                   mut data: *const u8,
+                                   nr_elements: usize,
+                                   element_size: usize) {
     /*
-    size_t i, ii;
+    usize i, ii;
     if (var != NULL) {
         printf("%s[%zu]=", var, nr_elements);
     }
@@ -54,10 +54,10 @@ pub unsafe extern "C" fn print_hex(mut var: *const libc::c_char,
 }
 #[no_mangle]
 pub unsafe extern "C" fn print_sage_u_vector(mut var: *const libc::c_char,
-                                             mut vector: *const uint16_t,
-                                             nr_elements: size_t) {
+                                             mut vector: *const u16,
+                                             nr_elements: usize) {
     /*
-    size_t i;
+    usize i;
     if (var != NULL) {
         printf("%s[%zu]=", var, nr_elements);
     }
@@ -76,11 +76,11 @@ pub unsafe extern "C" fn print_sage_u_vector(mut var: *const libc::c_char,
 }
 #[no_mangle]
 pub unsafe extern "C" fn print_sage_u_matrix(mut var: *const libc::c_char,
-                                             mut matrix: *const uint16_t,
-                                             nr_rows: size_t,
-                                             nr_columns: size_t) {
+                                             mut matrix: *const u16,
+                                             nr_rows: usize,
+                                             nr_columns: usize) {
     /*
-    size_t i;
+    usize i;
     if (var != NULL) {
         printf("%s[%zu][%zu]=", var, nr_rows, nr_columns);
     }
@@ -110,12 +110,12 @@ pub unsafe extern "C" fn print_sage_u_matrix(mut var: *const libc::c_char,
 pub unsafe extern "C" fn print_sage_u_vector_matrix(mut var:
                                                         *const libc::c_char,
                                                     mut matrix:
-                                                        *const uint16_t,
-                                                    nr_rows: size_t,
-                                                    nr_columns: size_t,
-                                                    nr_elements: size_t) {
+                                                        *const u16,
+                                                    nr_rows: usize,
+                                                    nr_columns: usize,
+                                                    nr_elements: usize) {
     /*
-    size_t i, j;
+    usize i, j;
     if (nr_elements == 1) {
         print_sage_u_matrix(var, matrix, nr_rows, nr_columns);
     } else if (nr_rows == 1 && nr_columns == 1) {
@@ -165,9 +165,9 @@ pub unsafe extern "C" fn print_sage_u_vector_matrix(mut var:
 #[no_mangle]
 pub unsafe extern "C" fn print_sage_s_vector(mut var: *const libc::c_char,
                                              mut poly: *const int16_t,
-                                             nr_elements: size_t) {
+                                             nr_elements: usize) {
     /*
-    size_t i;
+    usize i;
     if (var != NULL) {
         printf("%s[%zu]=", var, nr_elements);
     }
@@ -187,10 +187,10 @@ pub unsafe extern "C" fn print_sage_s_vector(mut var: *const libc::c_char,
 #[no_mangle]
 pub unsafe extern "C" fn print_sage_s_matrix(mut var: *const libc::c_char,
                                              mut matrix: *const int16_t,
-                                             nr_rows: size_t,
-                                             nr_columns: size_t) {
+                                             nr_rows: usize,
+                                             nr_columns: usize) {
     /*
-    size_t i;
+    usize i;
     if (var != NULL) {
         printf("%s[%zu][%zu]=", var, nr_rows, nr_columns);
     }
@@ -275,11 +275,11 @@ pub unsafe extern "C" fn print_sage_s_vector_matrix(mut var:
                                                         *const libc::c_char,
                                                     mut matrix:
                                                         *const int16_t,
-                                                    nr_rows: size_t,
-                                                    nr_columns: size_t,
-                                                    nr_elements: size_t) {
+                                                    nr_rows: usize,
+                                                    nr_columns: usize,
+                                                    nr_elements: usize) {
     /*
-    size_t i, j;
+    usize i, j;
     if (nr_elements == 1) {
         print_sage_s_matrix(var, matrix, nr_rows, nr_columns);
     } else if (nr_rows == 1 && nr_columns == 1) {
