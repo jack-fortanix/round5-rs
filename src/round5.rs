@@ -2,45 +2,6 @@
          non_upper_case_globals, unused_assignments, unused_mut)]
 extern "C" {
     /* *
-     * Performs the initialisation step of the SHAKE-256 XOF.
-     *
-     * @param ctx the shake context
-     */
-    #[no_mangle]
-    fn shake256_init(ctx: *mut shake_ctx);
-    /* *
-     * Performs the absorb step of the SHAKE-256 XOF.
-     *
-     * @param ctx the shake context
-     * @param input the input absorbed into the state
-     * @param input_len the length of the input
-     */
-    #[no_mangle]
-    fn shake256_absorb(ctx: *mut shake_ctx, input: *const uint8_t,
-                       input_len: size_t);
-    /* *
-     * Performs the squeeze step of the SHAKE-256 XOF. Squeezes full blocks of
-     * SHAKE256_RATE bytes each. Can be called multiple times to keep squeezing
-     * (i.e. this function is incremental).
-     *
-     * @param ctx the shake context
-     * @param output the output
-     * @param nr_blocks the number of blocks to squeeze
-     */
-    #[no_mangle]
-    fn shake256_squeezeblocks(ctx: *mut shake_ctx, output: *mut uint8_t,
-                              nr_blocks: size_t);
-    /* *
-     * Performs the full SHAKE-256 XOF to the given input.
-     * @param output the final output
-     * @param output_len the length of the output
-     * @param input the input
-     * @param input_len the length of the input
-     */
-    #[no_mangle]
-    fn shake256(output: *mut uint8_t, output_len: size_t,
-                input: *const uint8_t, input_len: size_t);
-    /* *
      * Constant time memory comparison function. Use to replace `memcmp()` when
      * comparing security critical data.
      *
@@ -73,100 +34,60 @@ extern "C" {
     fn zero_u8(out: *mut uint8_t, len: size_t);
     #[no_mangle]
     fn zero_u16(out: *mut uint16_t, len: size_t);
-    /*
- * Copyright (c) 2018, Koninklijke Philips N.V.
- */
-    /* *
- * @file
- * Declaration of miscellaneous macros and functions.
- */
-    /* * Macro for printing errors. */
-    /* *
-     * Prints the given data as hex digits.
-     *
-     * @param[in] var          the name of the data variable, printed before the data followed by an `=`,
-     *                         can be `NULL` to inhibit printing of `var=` and the final newline
-     * @param[in] data         the data to print
-     * @param[in] nr_elements  the number of elements in the data
-     * @param[in] element_size the size of the elements in bytes (bytes will be reversed inside element)
-     */
-    #[no_mangle]
-    fn print_hex(var: *const libc::c_char, data: *const uint8_t,
-                 nr_elements: size_t, element_size: size_t);
+
 }
-pub type uint8_t = libc::c_uchar;
-pub type uint16_t = libc::c_ushort;
-pub type uint64_t = libc::c_ulong;
-pub type size_t = libc::c_ulonglong;
+
+fn print_hex(var: *const libc::c_char, data: *const uint8_t,
+             nr_elements: size_t, element_size: size_t) {
+
+}
+
+type uint8_t = libc::c_uchar;
+type uint16_t = libc::c_ushort;
+type uint64_t = libc::c_ulong;
+type size_t = libc::c_ulonglong;
 // appropriate types
-pub type modq_t = uint16_t;
-pub type modp_t = uint16_t;
-pub const PARAMS_PK_SIZE: C2RustUnnamed_19 = 1349;
-pub const PARAMS_KAPPA_BYTES: C2RustUnnamed_0 = 32;
-pub const PARAMS_H1: C2RustUnnamed_16 = 8;
-pub const PARAMS_P_BITS: C2RustUnnamed_4 = 9;
-pub const PARAMS_P: C2RustUnnamed_9 = 512;
-pub const PARAMS_Q_BITS: C2RustUnnamed_3 = 13;
-pub const PARAMS_ND: C2RustUnnamed_7 = 1170;
-pub const PARAMS_NDP_SIZE: C2RustUnnamed_14 = 1317;
-pub const PARAMS_H: C2RustUnnamed_2 = 222;
-pub const PROBEVEC64: C2RustUnnamed_21 = 19;
-pub const PARAMS_RS_DIV: C2RustUnnamed_12 = 56;
-pub const PARAMS_RS_LIM: C2RustUnnamed_13 = 65520;
-pub const SHAKE256_RATE: C2RustUnnamed = 136;
-/*
- * Copyright (c) 2018, Koninklijke Philips N.V.
- */
-/* *
- * @file
- * Declaration of the SHAKE128, SHAKE256, cSHAKE128, and cSHAKE256 hash
- * functions.
- *
- * Note: all sizes are in bytes, not bits!
- */
-pub type shake_ctx = [uint8_t; 224];
-pub const PARAMS_K: C2RustUnnamed_8 = 1;
-pub const PARAMS_D: C2RustUnnamed_1 = 1170;
-pub const PARAMS_CT_SIZE: C2RustUnnamed_20 = 1477;
-pub const PARAMS_T_BITS: C2RustUnnamed_5 = 5;
-pub const PARAMS_B_BITS: C2RustUnnamed_6 = 1;
-pub const PARAMS_H2: C2RustUnnamed_17 = 8;
-pub const PARAMS_MU: C2RustUnnamed_10 = 256;
-pub const PARAMS_MUT_SIZE: C2RustUnnamed_11 = 160;
-pub const PARAMS_MUB_SIZE: C2RustUnnamed_15 = 32;
-pub const PARAMS_H3: C2RustUnnamed_18 = 128;
-/* *
- * The rate of the SHAKE-256 algorithm (i.e. internal block size, in bytes).
- */
-pub type C2RustUnnamed = libc::c_uint;
-//#include <openssl/evp.h>
-pub type C2RustUnnamed_0 = libc::c_uint;
-pub type C2RustUnnamed_1 = libc::c_uint;
-pub type C2RustUnnamed_2 = libc::c_uint;
-pub type C2RustUnnamed_3 = libc::c_uint;
-pub type C2RustUnnamed_4 = libc::c_uint;
-pub type C2RustUnnamed_5 = libc::c_uint;
-pub type C2RustUnnamed_6 = libc::c_uint;
-pub type C2RustUnnamed_7 = libc::c_uint;
-pub type C2RustUnnamed_8 = libc::c_uint;
-pub type C2RustUnnamed_9 = libc::c_uint;
-pub type C2RustUnnamed_10 = libc::c_uint;
-pub type C2RustUnnamed_11 = libc::c_uint;
-pub type C2RustUnnamed_12 = libc::c_uint;
-pub type C2RustUnnamed_13 = libc::c_uint;
-pub type C2RustUnnamed_14 = libc::c_uint;
-pub type C2RustUnnamed_15 = libc::c_uint;
-pub type C2RustUnnamed_16 = libc::c_uint;
-pub type C2RustUnnamed_17 = libc::c_uint;
-pub type C2RustUnnamed_18 = libc::c_uint;
-pub type C2RustUnnamed_19 = libc::c_uint;
-pub type C2RustUnnamed_20 = libc::c_uint;
+type modq_t = uint16_t;
+type modp_t = uint16_t;
+const PARAMS_PK_SIZE: usize = 1349;
+const PARAMS_KAPPA_BYTES: usize = 32;
+const PARAMS_H1: usize = 8;
+const PARAMS_P_BITS: usize = 9;
+const PARAMS_P: usize = 512;
+const PARAMS_Q_BITS: usize = 13;
+const PARAMS_ND: usize = 1170;
+const PARAMS_NDP_SIZE: usize = 1317;
+const PARAMS_H: usize = 222;
+const PROBEVEC64: usize = 19;
+const PARAMS_RS_DIV: usize = 56;
+const PARAMS_RS_LIM: usize = 65520;
+
+const PARAMS_K: usize = 1;
+const PARAMS_D: usize = 1170;
+const PARAMS_CT_SIZE: usize = 1477;
+const PARAMS_T_BITS: usize = 5;
+const PARAMS_B_BITS: usize = 1;
+const PARAMS_H2: usize = 8;
+const PARAMS_MU: usize = 256;
+const PARAMS_MUT_SIZE: usize = 160;
+const PARAMS_MUB_SIZE: usize = 32;
+const PARAMS_H3: usize = 128;
+
+const SHAKE256_RATE: usize = 136;
+
+unsafe fn shake256(out: *mut uint8_t, len: size_t,
+                   seed: *const u8, seed_len: size_t) {
+    let mut shake = crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len as usize)).unwrap();
+    shake.expand(std::slice::from_raw_parts_mut(out, len as usize));
+}
+
 // CCA_PKE Variant
-//static const size_t CRYPTO_SECRETKEYBYTES = (PARAMS_KAPPA_BYTES + PARAMS_KAPPA_BYTES + PARAMS_PK_SIZE);
-//static const size_t CRYPTO_PUBLICKEYBYTES = PARAMS_PK_SIZE;
-//static const size_t CRYPTO_BYTES          = (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + 16);
+
+pub const SECRETKEYBYTES:usize = (PARAMS_KAPPA_BYTES + PARAMS_KAPPA_BYTES + PARAMS_PK_SIZE);
+pub const PUBLICKEYBYTES:usize = (PARAMS_PK_SIZE);
+pub const CTEXT_BYTES:usize = (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + 16);
 // Size of the vector to pass to probe_cm
-pub type C2RustUnnamed_21 = libc::c_uint;
+
 // Cache-resistant "occupancy probe". Tests and "occupies" a single slot at x.
 // Return value zero (false) indicates the slot was originally empty.
 unsafe extern "C" fn probe_cm(mut v: *mut uint64_t, x: uint16_t)
@@ -198,13 +119,9 @@ unsafe extern "C" fn probe_cm(mut v: *mut uint64_t, x: uint16_t)
 // create a sparse ternary vector from a seed
 unsafe extern "C" fn create_secret_vector(mut idx: *mut [uint16_t; 2],
                                           mut seed: *const uint8_t) {
-    let mut v: [uint64_t; 19] =
-        [0i32 as uint64_t, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0];
-    let mut shake: shake_ctx = [0; 224];
-    shake256_init(&mut shake);
-    shake256_absorb(&mut shake, seed,
-                    PARAMS_KAPPA_BYTES as libc::c_int as size_t);
+    let mut v: [uint64_t; 19] = [0; 19];
+
+    let mut shake = crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, PARAMS_KAPPA_BYTES)).unwrap();
     let mut index: size_t = SHAKE256_RATE as libc::c_int as size_t;
     let mut output: [uint8_t; 136] =
         [0i32 as uint8_t, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -220,9 +137,8 @@ unsafe extern "C" fn create_secret_vector(mut idx: *mut [uint16_t; 2],
         loop  {
             loop  {
                 if index >= SHAKE256_RATE as libc::c_int as libc::c_ulonglong
-                   {
-                    shake256_squeezeblocks(&mut shake, output.as_mut_ptr(),
-                                           1i32 as size_t);
+                {
+                    shake.expand(&mut output);
                     index = 0i32 as size_t
                 }
                 x =
