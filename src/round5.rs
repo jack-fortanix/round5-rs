@@ -90,7 +90,7 @@ pub const CTEXT_BYTES:usize = (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + 16);
 
 // Cache-resistant "occupancy probe". Tests and "occupies" a single slot at x.
 // Return value zero (false) indicates the slot was originally empty.
-unsafe extern "C" fn probe_cm(mut v: *mut uint64_t, x: uint16_t)
+unsafe fn probe_cm(mut v: *mut uint64_t, x: uint16_t)
  -> libc::c_int {
     // construct the selector
     let y: uint64_t = (1u64 << (x as libc::c_int & 0x3fi32)) as uint64_t;
@@ -117,7 +117,7 @@ unsafe extern "C" fn probe_cm(mut v: *mut uint64_t, x: uint16_t)
     // return true if was occupied before
 }
 // create a sparse ternary vector from a seed
-unsafe extern "C" fn create_secret_vector(mut idx: *mut [uint16_t; 2],
+unsafe fn create_secret_vector(mut idx: *mut [uint16_t; 2],
                                           mut seed: *const uint8_t) {
     let mut v: [uint64_t; 19] = [0; 19];
 
@@ -166,7 +166,7 @@ unsafe extern "C" fn create_secret_vector(mut idx: *mut [uint16_t; 2],
     };
 }
 // multiplication mod q, result length n
-unsafe extern "C" fn ringmul_q(mut d: *mut modq_t, mut a: *mut modq_t,
+unsafe fn ringmul_q(mut d: *mut modq_t, mut a: *mut modq_t,
                                mut idx: *mut [uint16_t; 2]) {
     let mut i: size_t = 0;
     let mut j: size_t = 0;
@@ -244,7 +244,7 @@ unsafe extern "C" fn ringmul_q(mut d: *mut modq_t, mut a: *mut modq_t,
     };
 }
 // multiplication mod p, result length mu
-unsafe extern "C" fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t,
+unsafe fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t,
                                mut idx: *mut [uint16_t; 2]) {
     let mut i: size_t = 0;
     let mut j: size_t = 0;
@@ -375,7 +375,7 @@ unsafe extern "C" fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t,
     copy_u16(d, tmp_d.as_mut_ptr(), PARAMS_MU as libc::c_int as size_t);
 }
 // Creates A random for the given seed and algorithm parameters.
-unsafe extern "C" fn create_A_random(mut A_random: *mut modq_t,
+unsafe fn create_A_random(mut A_random: *mut modq_t,
                                      mut seed: *const uint8_t) {
     shake256(A_random as *mut uint8_t,
              ((PARAMS_D as libc::c_int * PARAMS_K as libc::c_int) as
@@ -384,7 +384,7 @@ unsafe extern "C" fn create_A_random(mut A_random: *mut modq_t,
              seed, PARAMS_KAPPA_BYTES as libc::c_int as size_t);
 }
 // compress ND elements of q bits into p bits and pack into a byte string
-unsafe extern "C" fn pack_q_p(mut pv: *mut uint8_t, mut vq: *const modq_t,
+unsafe fn pack_q_p(mut pv: *mut uint8_t, mut vq: *const modq_t,
                               rounding_constant: modq_t) {
     let mut i: size_t = 0; // pack p bits
     let mut j: size_t = 0;
@@ -429,7 +429,7 @@ unsafe extern "C" fn pack_q_p(mut pv: *mut uint8_t, mut vq: *const modq_t,
     };
 }
 // unpack a byte string into ND elements of p bits
-unsafe extern "C" fn unpack_p(mut vp: *mut modp_t, mut pv: *const uint8_t) {
+unsafe fn unpack_p(mut vp: *mut modp_t, mut pv: *const uint8_t) {
     let mut i: size_t = 0; // unpack p bits
     let mut j: size_t = 0;
     let mut t: modp_t = 0;
@@ -468,7 +468,7 @@ unsafe extern "C" fn unpack_p(mut vp: *mut modp_t, mut pv: *const uint8_t) {
     };
 }
 // generate a keypair (sigma, B)
-unsafe extern "C" fn r5_cpa_pke_keygen(mut pk: *mut uint8_t,
+unsafe fn r5_cpa_pke_keygen(mut pk: *mut uint8_t,
                                        mut sk: *mut uint8_t,
                                        mut seed: *const uint8_t)
  -> libc::c_int {
@@ -489,7 +489,7 @@ unsafe extern "C" fn r5_cpa_pke_keygen(mut pk: *mut uint8_t,
              B.as_mut_ptr(), PARAMS_H1 as libc::c_int as modq_t);
     return 0i32;
 }
-unsafe extern "C" fn r5_cpa_pke_encrypt(mut ct: *mut uint8_t,
+unsafe fn r5_cpa_pke_encrypt(mut ct: *mut uint8_t,
                                         mut pk: *const uint8_t,
                                         mut m: *const uint8_t,
                                         mut rho: *const uint8_t)
@@ -589,7 +589,7 @@ unsafe extern "C" fn r5_cpa_pke_encrypt(mut ct: *mut uint8_t,
     }
     return 0i32;
 }
-unsafe extern "C" fn r5_cpa_pke_decrypt(mut m: *mut uint8_t,
+unsafe fn r5_cpa_pke_decrypt(mut m: *mut uint8_t,
                                         mut sk: *const uint8_t,
                                         mut ct: *const uint8_t)
  -> libc::c_int {
@@ -670,17 +670,75 @@ unsafe extern "C" fn r5_cpa_pke_decrypt(mut m: *mut uint8_t,
               PARAMS_KAPPA_BYTES as libc::c_int as size_t, 1i32 as size_t);
     return 0i32;
 }
-unsafe extern "C" fn round5_dem(mut c2: *mut uint8_t, mut c2_len: *mut size_t,
-                                mut key: *const uint8_t,
-                                mut m: *const uint8_t, m_len: size_t)
+unsafe fn round5_dem(mut c2: *mut uint8_t, mut c2_len: *mut size_t,
+                     mut key: *const uint8_t,
+                     mut m: *const uint8_t, m_len: size_t)
  -> libc::c_int {
+
+    use mbedtls::cipher::*;
+
+    let raw_key = std::slice::from_raw_parts(key, 32);
+
+    let mut shake = crate::sha3::ShakeXof::new(256, &raw_key).unwrap();
+
+    let mut key_and_iv = vec![0; 32+12];
+    shake.expand(&mut key_and_iv);
+
+    let message = std::slice::from_raw_parts(m, m_len as usize);
+
+    let cipher = Cipher::<_, Authenticated, _>::new(
+        raw::CipherId::Aes,
+        raw::CipherMode::GCM,
+        256
+    ).unwrap();
+    let cipher = cipher.set_key_iv(&key_and_iv[0..32], &key_and_iv[32..]).unwrap();
+
+    let ad = vec![];
+
+    let mut ctext = vec![0; message.len()];
+    let mut tag = vec![0; 16];
+
+    cipher.encrypt_auth(&ad, &message, &mut ctext, &mut tag).unwrap();
+
+    copy_u8(c2, ctext.as_ptr(), ctext.len() as u64);
+    copy_u8(c2.offset(ctext.len() as isize), tag.as_ptr(), 16);
+
     return 0i32;
 }
-unsafe extern "C" fn round5_dem_inverse(mut m: *mut uint8_t,
-                                        mut m_len: *mut size_t,
-                                        mut key: *const uint8_t,
-                                        mut c2: *const uint8_t,
-                                        c2_len: size_t) -> libc::c_int {
+
+unsafe fn round5_dem_inverse(mut m: *mut uint8_t,
+                             mut m_len: *mut size_t,
+                             mut key: *const uint8_t,
+                             mut c2: *const uint8_t,
+                             c2_len: size_t) -> libc::c_int {
+    use mbedtls::cipher::*;
+
+    let raw_key = std::slice::from_raw_parts(key, 32);
+
+    let mut shake = crate::sha3::ShakeXof::new(256, &raw_key).unwrap();
+
+    let mut key_and_iv = vec![0; 32+12];
+    shake.expand(&mut key_and_iv);
+
+    let ctext = std::slice::from_raw_parts(c2, c2_len as usize);
+
+    let cipher = Cipher::<_, Authenticated, _>::new(
+        raw::CipherId::Aes,
+        raw::CipherMode::GCM,
+        256
+    ).unwrap();
+    let cipher = cipher.set_key_iv(&key_and_iv[0..32], &key_and_iv[32..]).unwrap();
+
+    let ad = vec![];
+
+    let mut ptext = vec![0; ctext.len() - 16];
+
+    cipher.decrypt_auth(&ad, &ctext[0..ctext.len()-16], &mut ptext, &ctext[ctext.len()-16..]).unwrap();
+
+    copy_u8(m, ptext.as_ptr(), ptext.len() as u64);
+
+    *m_len = ptext.len() as u64;
+
     return 0i32;
 }
 /* *
@@ -690,8 +748,8 @@ unsafe extern "C" fn round5_dem_inverse(mut m: *mut uint8_t,
      * @param[out] sk secret key
      * @return __0__ in case of success
      */
-#[no_mangle]
-pub unsafe extern "C" fn crypto_encrypt_keypair(mut pk: *mut uint8_t,
+
+pub unsafe fn crypto_encrypt_keypair(mut pk: *mut uint8_t,
                                                 mut sk: *mut uint8_t,
                                                 mut coins: *const uint8_t)
  -> libc::c_int {
@@ -708,7 +766,7 @@ pub unsafe extern "C" fn crypto_encrypt_keypair(mut pk: *mut uint8_t,
             PARAMS_PK_SIZE as libc::c_int as size_t);
     return 0i32;
 }
-unsafe extern "C" fn r5_cca_kem_encapsulate(mut ct: *mut uint8_t,
+unsafe fn r5_cca_kem_encapsulate(mut ct: *mut uint8_t,
                                             mut k: *mut uint8_t,
                                             mut pk: *const uint8_t,
                                             mut coins: *const uint8_t)
@@ -768,8 +826,8 @@ unsafe extern "C" fn r5_cca_kem_encapsulate(mut ct: *mut uint8_t,
      * @param[in]  pk     the public key to use for the encryption
      * @return __0__ in case of success
      */
-#[no_mangle]
-pub unsafe extern "C" fn crypto_encrypt(mut ct: *mut uint8_t,
+
+pub unsafe fn crypto_encrypt(mut ct: *mut uint8_t,
                                         mut ct_len: *mut size_t,
                                         mut m: *const uint8_t, m_len: size_t,
                                         mut pk: *const uint8_t,
@@ -798,7 +856,7 @@ pub unsafe extern "C" fn crypto_encrypt(mut ct: *mut uint8_t,
     } // r5_cpa_pke_decrypt m'
     return result;
 }
-unsafe extern "C" fn r5_cca_kem_decapsulate(mut k: *mut uint8_t,
+unsafe fn r5_cca_kem_decapsulate(mut k: *mut uint8_t,
                                             mut ct: *const uint8_t,
                                             mut sk: *const uint8_t)
  -> libc::c_int {
@@ -882,8 +940,8 @@ unsafe extern "C" fn r5_cca_kem_decapsulate(mut k: *mut uint8_t,
      * @param[in]  sk     the secret key to use for the decryption
      * @return __0__ in case of success
      */
-#[no_mangle]
-pub unsafe extern "C" fn crypto_encrypt_open(mut m: *mut uint8_t,
+
+pub unsafe fn crypto_encrypt_open(mut m: *mut uint8_t,
                                              mut m_len: *mut size_t,
                                              mut ct: *const uint8_t,
                                              ct_len: size_t,
