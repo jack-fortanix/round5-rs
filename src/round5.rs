@@ -421,17 +421,10 @@ fn round5_dem_inverse(ctext: &[u8], key: &[u8]) -> Vec<u8> {
         .unwrap();
 
     let ad = vec![];
-
+    let tag = &ctext[ctext.len() - DEM_TAG_LEN..];
+    let ctext = &ctext[0..ctext.len() - DEM_TAG_LEN];
     let mut ptext = vec![0; ctext.len() - DEM_TAG_LEN];
-
-    cipher
-        .decrypt_auth(
-            &ad,
-            &ctext[0..ctext.len() - DEM_TAG_LEN],
-            &mut ptext,
-            &ctext[ctext.len() - DEM_TAG_LEN..],
-        )
-        .unwrap();
+    cipher.decrypt_auth(&ad, ctext, &mut ptext, tag).unwrap();
 
     ptext
 }
