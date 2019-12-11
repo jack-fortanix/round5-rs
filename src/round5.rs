@@ -286,13 +286,12 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
         let j = 8 * PARAMS_NDP_SIZE + PARAMS_T_BITS * i;
         let mut t = (ct[(j >> 3)] >> (j % 8)) as u16;
         t |= (ct[(j >> 3) + 1] as u16) << (8 - (j % 8));
-        v[i] = (t as i32 & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t;
+        v[i] = (t & (1u16 << PARAMS_T_BITS) - 1) as modp_t;
     }
     // X' = v - X', compressed to 1 bit
-    let mut x_p: modp_t = 0;
     for i in 0..PARAMS_MU {
         // v - X' as mod p value (to be able to perform the rounding!)
-        x_p = (((v[i] as i32) << PARAMS_P_BITS as i32 - PARAMS_T_BITS as i32) - X_prime[i] as i32)
+        let mut x_p = (((v[i] as i32) << PARAMS_P_BITS as i32 - PARAMS_T_BITS as i32) - X_prime[i] as i32)
             as modp_t;
         x_p = (x_p as i32 + PARAMS_H3 as i32 >> PARAMS_P_BITS as i32 - PARAMS_B_BITS as i32
             & (1i32 << PARAMS_B_BITS as i32) - 1i32) as modp_t;
