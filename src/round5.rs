@@ -635,17 +635,10 @@ unsafe fn r5_cca_kem_decapsulate(k: &mut [u8], ct: &[u8], sk: &[u8]) -> i32 {
         L_g_rho_prime[2].as_ptr(),
     );
     // ct' = (U',v',g')
-    copy_u8(
-        ct_prime.as_mut_ptr().offset(PARAMS_CT_SIZE as isize),
-        L_g_rho_prime[1].as_ptr(),
-        PARAMS_KAPPA_BYTES,
-    );
+    ct_prime[PARAMS_CT_SIZE..].copy_from_slice(&L_g_rho_prime[1]);
     // k = H(L', ct')
-    copy_u8(
-        hash_in.as_mut_ptr(),
-        L_g_rho_prime[0].as_ptr(),
-        PARAMS_KAPPA_BYTES,
-    );
+
+    hash_in[0..PARAMS_KAPPA_BYTES].copy_from_slice(&L_g_rho_prime[0]);
     // verification ok ?
     let fail: u8 = constant_time_memcmp(
         ct.as_ptr() as *const libc::c_void,
@@ -659,13 +652,7 @@ unsafe fn r5_cca_kem_decapsulate(k: &mut [u8], ct: &[u8], sk: &[u8]) -> i32 {
         PARAMS_KAPPA_BYTES,
         fail,
     );
-    copy_u8(
-        hash_in
-            .as_mut_ptr()
-            .offset(PARAMS_KAPPA_BYTES as isize),
-        ct_prime.as_mut_ptr(),
-        (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES) as usize,
-    );
+    hash_in[PARAMS_KAPPA_BYTES..PARAMS_CT_SIZE+PARAMS_KAPPA_BYTES*2].copy_from_slice(&ct_prime);
     shake256(
         k.as_mut_ptr(),
         PARAMS_KAPPA_BYTES,
