@@ -304,7 +304,7 @@ fn unpack_p(vp: &mut [modp_t], pv: &[u8]) {
     }
 }
 // generate a keypair (sigma, B)
-unsafe fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
+fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     let mut A: [modq_t; PARAMS_ND] = [0; PARAMS_ND]; // sigma = seed of A
     let mut B: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
@@ -314,13 +314,16 @@ unsafe fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
 
     sk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES]);
     create_secret_vector(&mut S_idx, &sk[0..PARAMS_KAPPA_BYTES]);
-    ringmul_q(&mut B, &A, &S_idx);
-    // Compress B q_bits -> p_bits, pk = sigma | B
-    pack_q_p(
-        pk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize),
-        B.as_mut_ptr(),
-        PARAMS_H1 as i32 as modq_t,
-    );
+
+    unsafe {
+        ringmul_q(&mut B, &A, &S_idx);
+        // Compress B q_bits -> p_bits, pk = sigma | B
+        pack_q_p(
+            pk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize),
+            B.as_mut_ptr(),
+            PARAMS_H1 as i32 as modq_t,
+        );
+    }
 }
 
 unsafe fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
@@ -466,11 +469,9 @@ pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut pk = vec![0u8; PUBLICKEYBYTES];
     let mut sk = vec![0u8; SECRETKEYBYTES];
     /* Generate the base key pair */
-    unsafe {
-        r5_cpa_pke_keygen(&mut pk, &mut sk, &coins[0..64]);
-    }
-    /* Append y and pk to sk */
+    r5_cpa_pke_keygen(&mut pk, &mut sk, &coins[0..64]);
 
+    /* Append y and pk to sk */
     sk[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES].copy_from_slice(&coins[64..]);
     sk[2 * PARAMS_KAPPA_BYTES..].copy_from_slice(&pk);
 
