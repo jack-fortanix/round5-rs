@@ -326,24 +326,25 @@ unsafe fn unpack_p(mut vp: *mut modp_t, mut pv: *const u8) {
     }
 }
 // generate a keypair (sigma, B)
-unsafe fn r5_cpa_pke_keygen(mut pk: *mut u8, mut sk: *mut u8, mut seed: *const u8) -> i32 {
+unsafe fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     let mut A: [modq_t; 1170] = [0; 1170]; // sigma = seed of A
     let mut B: [modq_t; 1170] = [0; 1170];
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
-    copy_u8(pk, seed, 32i32 as usize);
+    pk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[0..PARAMS_KAPPA_BYTES]);
     // A from sigma
-    create_A_random(A.as_mut_ptr(), pk); // secret key -- Random S
-    copy_u8(sk, seed.offset(32), 32i32 as usize); // B = A * S
-    create_secret_vector(S_idx.as_mut_ptr(), sk as *const u8);
+    create_A_random(A.as_mut_ptr(), pk.as_ptr()); // secret key -- Random S
+
+    sk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES]);
+    create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
     ringmul_q(B.as_mut_ptr(), A.as_mut_ptr(), S_idx.as_mut_ptr());
     // Compress B q_bits -> p_bits, pk = sigma | B
     pack_q_p(
-        pk.offset(PARAMS_KAPPA_BYTES as isize),
+        pk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize),
         B.as_mut_ptr(),
         PARAMS_H1 as i32 as modq_t,
     );
-    return 0i32;
 }
+
 unsafe fn r5_cpa_pke_encrypt(
     mut ct: *mut u8,
     mut pk: *const u8,
@@ -488,6 +489,8 @@ unsafe fn round5_dem(
     copy_u8(c2, ctext.as_ptr(), ctext.len());
     copy_u8(c2.offset(ctext.len() as isize), tag.as_ptr(), 16);
 
+    *c2_len = ctext.len() + 16;
+
     return 0i32;
 }
 
@@ -534,35 +537,22 @@ unsafe fn round5_dem_inverse(
 
     return 0i32;
 }
-/* *
- * Generates an ENCRYPT key pair. Uses the fixed parameter configuration.
- *
- * @param[out] pk public key
- * @param[out] sk secret key
- * @return __0__ in case of success
- */
 
-pub unsafe fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
+pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut pk = vec![0u8; PUBLICKEYBYTES];
     let mut sk = vec![0u8; SECRETKEYBYTES];
     /* Generate the base key pair */
-    r5_cpa_pke_keygen(pk.as_mut_ptr(), sk.as_mut_ptr(), coins.as_ptr());
+    unsafe {
+        r5_cpa_pke_keygen(&mut pk, &mut sk, &coins[0..64]);
+    }
     /* Append y and pk to sk */
 
-    copy_u8(
-        sk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize),
-        coins.as_ptr().offset(64),
-        PARAMS_KAPPA_BYTES as usize,
-    ); // G: (l | g | rho) = h(coins | pk);
-    copy_u8(
-        sk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize)
-            .offset(PARAMS_KAPPA_BYTES as isize),
-        pk.as_ptr(),
-        PARAMS_PK_SIZE as usize,
-    );
+    sk[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES].copy_from_slice(&coins[64..]);
+    sk[2*PARAMS_KAPPA_BYTES..].copy_from_slice(&pk);
 
     return (pk,sk)
 }
+
 unsafe fn r5_cca_kem_encapsulate(
     mut ct: *mut u8,
     mut k: *mut u8,
@@ -629,38 +619,37 @@ unsafe fn r5_cca_kem_encapsulate(
  * @return __0__ in case of success
  */
 
-pub unsafe fn crypto_encrypt(
-    mut ct: *mut u8,
-    mut ct_len: *mut usize,
-    mut m: *const u8,
-    m_len: usize,
-    mut pk: *const u8,
-    mut coins: *const u8,
-) -> i32 {
-    let mut result: i32 = -1i32;
+pub unsafe fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
+
+    if coins.len() != 32 {
+        return Vec::new();
+    }
+
+    let mut ct = vec![0u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + msg.len() + 16];
+
     let c1_len: usize = (PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize;
     let mut c1: [u8; 1509] = [0; 1509];
     let mut c2_len: usize = 0;
     let mut k: [u8; 32] = [0; 32];
     /* Determine c1 and k */
-    r5_cca_kem_encapsulate(c1.as_mut_ptr(), k.as_mut_ptr(), pk, coins);
+    r5_cca_kem_encapsulate(c1.as_mut_ptr(), k.as_mut_ptr(), pk.as_ptr(), coins.as_ptr());
     /* Copy c1 into first part of ct */
-    copy_u8(ct, c1.as_mut_ptr(), c1_len);
-    *ct_len = c1_len;
+    copy_u8(ct.as_mut_ptr(), c1.as_mut_ptr(), c1_len);
+    let mut ct_len = c1_len;
     /* Apply DEM to get second part of ct */
     if !(round5_dem(
-        ct.offset(c1_len as isize),
+        ct.as_mut_ptr().offset(c1_len as isize),
         &mut c2_len,
         k.as_mut_ptr(),
-        m,
-        m_len,
+        msg.as_ptr(),
+        msg.len()
     ) != 0)
     {
-        *ct_len = (*ct_len as u64).wrapping_add(c2_len as u64) as usize;
+        ct_len += c2_len;
         /* All OK */
-        result = 0i32
     } // r5_cpa_pke_decrypt m'
-    return result;
+    ct.truncate(ct_len);
+    return ct;
 }
 unsafe fn r5_cca_kem_decapsulate(mut k: *mut u8, mut ct: *const u8, mut sk: *const u8) -> i32 {
     let mut hash_in: [u8; 1541] = [0; 1541];
@@ -735,16 +724,6 @@ unsafe fn r5_cca_kem_decapsulate(mut k: *mut u8, mut ct: *const u8, mut sk: *con
     );
     return 0i32;
 }
-/* *
- * Decrypts a message.
- *
- * @param[out] m      the decrypted message
- * @param[out] m_len  the length of the decrypted message (`ct_len` - `CRYPTO_CIPHERTEXTBYTES`)
- * @param[in]  ct     the message to decrypt
- * @param[in]  ct_len the length of the message to decrypt
- * @param[in]  sk     the secret key to use for the decryption
- * @return __0__ in case of success
- */
 
 pub unsafe fn crypto_encrypt_open(
     mut m: *mut u8,
