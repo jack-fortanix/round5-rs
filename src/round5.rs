@@ -262,11 +262,9 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
         let mut t = X[i].wrapping_add(PARAMS_H2) >> (PARAMS_P_BITS - PARAMS_T_BITS);
         // add message
 
-        let tm = (m[i*PARAMS_B_BITS >> 3] >> ((i * PARAMS_B_BITS) % 8)) as u16;
-        t = ((t as i32
-              + ((tm as i32 & (1i32 << PARAMS_B_BITS as i32) - 1i32)
-                 << PARAMS_T_BITS as i32 - PARAMS_B_BITS as i32)) as modp_t as i32
-             & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t; // ct = U^T | v
+        let tm = (m[i * PARAMS_B_BITS >> 3] >> ((i * PARAMS_B_BITS) % 8)) as u16;
+        t = ((t + ((tm & (1u16 << PARAMS_B_BITS) - 1) << PARAMS_T_BITS - PARAMS_B_BITS)) as modp_t
+            & (1u16 << PARAMS_T_BITS) - 1) as modp_t; // ct = U^T | v
 
         ct[(j >> 3)] |= (t << (j & 7)) as u8; // unpack t bits
         ct[(j >> 3) + 1] |= (t >> (8 - (j % 8))) as u8;
