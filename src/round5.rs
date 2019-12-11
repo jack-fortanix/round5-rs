@@ -62,7 +62,7 @@ const PARAMS_B_BITS: usize = 1;
 const PARAMS_H2: u16 = 8;
 const PARAMS_MU: usize = 256;
 const PARAMS_MUT_SIZE: usize = 160;
-const PARAMS_H3: usize = 128;
+const PARAMS_H3: u16 = 128;
 
 const DEM_TAG_LEN: usize = 16;
 
@@ -295,8 +295,7 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     for i in 0..PARAMS_MU {
         // v - X' as mod p value (to be able to perform the rounding!)
         let mut x_p = ((v[i]) << (PARAMS_P_BITS - PARAMS_T_BITS)).wrapping_sub(X_prime[i]);
-        x_p = (x_p as i32 + PARAMS_H3 as i32 >> PARAMS_P_BITS as i32 - PARAMS_B_BITS as i32
-            & (1i32 << PARAMS_B_BITS as i32) - 1i32) as modp_t;
+        x_p = x_p.wrapping_add(PARAMS_H3) >> (PARAMS_P_BITS - PARAMS_B_BITS) & ((1u16 << PARAMS_B_BITS) - 1);
         m1[(i.wrapping_mul(PARAMS_B_BITS as usize) >> 3i32) as usize] =
             (m1[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
                 | (x_p as i32) << (i.wrapping_mul(PARAMS_B_BITS) & 7)) as u8;
