@@ -181,28 +181,28 @@ fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
     }
 }
 // multiplication mod p, result length mu
-unsafe fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t, mut idx: *mut [u16; 2]) {
+unsafe fn ringmul_p(d: &mut [modp_t], a: &[modp_t], idx: &[[u16; 2]; 111]) {
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut k: usize = 0;
     let mut p: [modp_t; 1171] = [0; 1171];
     // Note: order of coefficients a[1..n] is reversed!
     // Without error correction we "lift" -- i.e. multiply by (x - 1)
-    p[0] = -(*a.offset(0) as i32) as modp_t;
+    p[0] = -(*a.as_ptr().offset(0) as i32) as modp_t;
     i = 1i32 as usize;
     while i < PARAMS_ND {
         p[((PARAMS_ND as i32 + 1i32) as u64).wrapping_sub(i as u64) as usize] =
-            (*a.offset(i.wrapping_sub(1) as isize) as i32 - *a.offset(i as isize) as i32) as modp_t;
+            (*a.as_ptr().offset(i.wrapping_sub(1) as isize) as i32 - *a.as_ptr().offset(i as isize) as i32) as modp_t;
         i = i.wrapping_add(1)
     }
-    p[1] = *a.offset((PARAMS_ND as i32 - 1i32) as isize);
+    p[1] = *a.as_ptr().offset((PARAMS_ND as i32 - 1i32) as isize);
     // Initialize result
     let mut tmp_d: [modp_t; PARAMS_ND] = [0u16; PARAMS_ND];
 
     i = 0i32 as usize;
     while i < (PARAMS_H / 2) {
         // Modified to always scan the same ranges
-        k = (*idx.offset(i as isize))[0] as usize; // positive coefficients
+        k = (*idx.as_ptr().offset(i as isize))[0] as usize; // positive coefficients
         tmp_d[0] = (tmp_d[0] as i32 + p[k as usize] as i32) as modp_t; // negative coefficients
         j = 1i32 as usize;
         while k > 0 {
@@ -216,7 +216,7 @@ unsafe fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t, mut idx: *mut [u16; 
             tmp_d[j as usize] = (tmp_d[j as usize] as i32 + p[k as usize] as i32) as modp_t;
             j = j.wrapping_add(1)
         }
-        k = (*idx.offset(i as isize))[1] as usize;
+        k = (*idx.as_ptr().offset(i as isize))[1] as usize;
         tmp_d[0] = (tmp_d[0] as i32 - p[k as usize] as i32) as modp_t;
         j = 1i32 as usize;
         while k > 0 {
@@ -241,7 +241,7 @@ unsafe fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t, mut idx: *mut [u16; 
         i = i.wrapping_add(1)
     }
     // Copy result
-    copy_u16(d, tmp_d.as_mut_ptr(), PARAMS_MU as usize);
+    copy_u16(d.as_mut_ptr(), tmp_d.as_mut_ptr(), PARAMS_MU as usize);
 }
 
 // Creates A random for the given seed and algorithm parameters.
@@ -317,7 +317,7 @@ unsafe fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8])
                                   // Create R
     create_secret_vector(&mut R_idx, &rho); // U^T == U = A^T * R == A * R (mod q)
     ringmul_q(&mut U_T, &A, &R_idx); // X = B^T * R == B * R (mod p)
-    ringmul_p(X.as_mut_ptr(), B.as_mut_ptr(), R_idx.as_mut_ptr()); // ct = U^T | v
+    ringmul_p(&mut X, &B, &R_idx); // ct = U^T | v
     pack_q_p(&mut ct[0..PARAMS_NDP_SIZE], &U_T, PARAMS_H2);
     ct[PARAMS_NDP_SIZE..PARAMS_MUT_SIZE + PARAMS_NDP_SIZE].copy_from_slice(&[0; PARAMS_MUT_SIZE]);
     j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
@@ -368,8 +368,8 @@ unsafe fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
         j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
         i = i.wrapping_add(1)
     }
-    let mut X_prime: [modp_t; 256] = [0; 256];
-    ringmul_p(X_prime.as_mut_ptr(), U_T.as_mut_ptr(), S_idx.as_mut_ptr());
+    let mut X_prime: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
+    ringmul_p(&mut X_prime, &U_T, &S_idx);
     // X' = v - X', compressed to 1 bit
     let mut x_p: modp_t = 0;
     i = 0i32 as usize;
@@ -421,9 +421,9 @@ fn round5_dem_inverse(ctext: &[u8], key: &[u8]) -> Vec<u8> {
         .unwrap();
 
     let ad = vec![];
+    let mut ptext = vec![0; ctext.len() - DEM_TAG_LEN];
     let tag = &ctext[ctext.len() - DEM_TAG_LEN..];
     let ctext = &ctext[0..ctext.len() - DEM_TAG_LEN];
-    let mut ptext = vec![0; ctext.len() - DEM_TAG_LEN];
     cipher.decrypt_auth(&ad, ctext, &mut ptext, tag).unwrap();
 
     ptext
