@@ -7,6 +7,9 @@
     unused_assignments,
     unused_mut
 )]
+
+use mbedtls::cipher::*;
+
 extern "C" {
     /* *
      * Constant time memory comparison function. Use to replace `memcmp()` when
@@ -453,23 +456,12 @@ unsafe fn r5_cpa_pke_decrypt(mut m: *mut u8, mut sk: *const u8, mut ct: *const u
     copy_u8(m, m1.as_mut_ptr(), PARAMS_KAPPA_BYTES as usize);
     return 0i32;
 }
-unsafe fn round5_dem(
-    mut c2: *mut u8,
-    mut c2_len: *mut usize,
-    mut key: *const u8,
-    mut m: *const u8,
-    m_len: usize,
-) -> i32 {
-    use mbedtls::cipher::*;
 
-    let raw_key = std::slice::from_raw_parts(key, 32);
-
-    let mut shake = crate::sha3::ShakeXof::new(256, &raw_key).unwrap();
+fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) {
+    let mut shake = crate::sha3::ShakeXof::new(256, &key).unwrap();
 
     let mut key_and_iv = vec![0; 32 + 12];
     shake.expand(&mut key_and_iv);
-
-    let message = std::slice::from_raw_parts(m, m_len as usize);
 
     let cipher =
         Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256).unwrap();
@@ -479,19 +471,11 @@ unsafe fn round5_dem(
 
     let ad = vec![];
 
-    let mut ctext = vec![0; message.len()];
     let mut tag = vec![0; 16];
 
-    cipher
-        .encrypt_auth(&ad, &message, &mut ctext, &mut tag)
-        .unwrap();
+    cipher.encrypt_auth(&ad, &msg, &mut out, &mut tag).unwrap();
 
-    copy_u8(c2, ctext.as_ptr(), ctext.len());
-    copy_u8(c2.offset(ctext.len() as isize), tag.as_ptr(), 16);
-
-    *c2_len = ctext.len() + 16;
-
-    return 0i32;
+    out[msg.len()..].copy_from_slice(&tag);
 }
 
 unsafe fn round5_dem_inverse(
@@ -619,7 +603,7 @@ unsafe fn r5_cca_kem_encapsulate(
  * @return __0__ in case of success
  */
 
-pub unsafe fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
+pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
 
     if coins.len() != 32 {
         return Vec::new();
@@ -627,28 +611,16 @@ pub unsafe fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
 
     let mut ct = vec![0u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + msg.len() + 16];
 
-    let c1_len: usize = (PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize;
-    let mut c1: [u8; 1509] = [0; 1509];
-    let mut c2_len: usize = 0;
+    let c1_len = PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES;
+
     let mut k: [u8; 32] = [0; 32];
-    /* Determine c1 and k */
-    r5_cca_kem_encapsulate(c1.as_mut_ptr(), k.as_mut_ptr(), pk.as_ptr(), coins.as_ptr());
-    /* Copy c1 into first part of ct */
-    copy_u8(ct.as_mut_ptr(), c1.as_mut_ptr(), c1_len);
-    let mut ct_len = c1_len;
+
+    unsafe {
+        r5_cca_kem_encapsulate(ct.as_mut_ptr(), k.as_mut_ptr(), pk.as_ptr(), coins.as_ptr());
+    }
+
     /* Apply DEM to get second part of ct */
-    if !(round5_dem(
-        ct.as_mut_ptr().offset(c1_len as isize),
-        &mut c2_len,
-        k.as_mut_ptr(),
-        msg.as_ptr(),
-        msg.len()
-    ) != 0)
-    {
-        ct_len += c2_len;
-        /* All OK */
-    } // r5_cpa_pke_decrypt m'
-    ct.truncate(ct_len);
+    round5_dem(&mut ct[c1_len..], &k, &msg);
     return ct;
 }
 unsafe fn r5_cca_kem_decapsulate(mut k: *mut u8, mut ct: *const u8, mut sk: *const u8) -> i32 {
