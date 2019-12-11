@@ -523,12 +523,13 @@ pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
 
 unsafe fn r5_cca_kem_encapsulate(
     ct: &mut [u8],
-    k: &mut [u8],
     pk: &[u8],
     coins: &[u8],
-) -> i32 {
+) -> Vec<u8> {
     let mut hash_in: [u8; 1541] = [0; 1541];
     let mut L_g_rho: [[u8; PARAMS_KAPPA_BYTES]; 3] = [[0; PARAMS_KAPPA_BYTES]; 3];
+
+    let mut shake = crate::sha3::Shake::new(256).unwrap();
 
     copy_u8(
         hash_in.as_mut_ptr(),
@@ -557,25 +558,10 @@ unsafe fn r5_cca_kem_encapsulate(
         PARAMS_KAPPA_BYTES,
     );
     /* k = H(L, ct) */
-    copy_u8(
-        hash_in.as_mut_ptr(),
-        L_g_rho[0].as_mut_ptr(),
-        PARAMS_KAPPA_BYTES,
-    );
-    copy_u8(
-        hash_in
-            .as_mut_ptr()
-            .offset(PARAMS_KAPPA_BYTES as isize),
-        ct.as_ptr(),
-        (PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize,
-    );
-    shake256(
-        k.as_mut_ptr(),
-        PARAMS_KAPPA_BYTES,
-        hash_in.as_mut_ptr(),
-        (PARAMS_KAPPA_BYTES as i32 + PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize,
-    );
-    return 0i32;
+
+    shake.update(&L_g_rho[0]);
+    shake.update(&ct[0..PARAMS_CT_SIZE+PARAMS_KAPPA_BYTES]);
+    return shake.finalize(PARAMS_KAPPA_BYTES);
 }
 /* *
  * Encrypts a message.
@@ -600,9 +586,7 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
 
     let mut k: [u8; 32] = [0; 32];
 
-    unsafe {
-        r5_cca_kem_encapsulate(&mut ct[0..c1_len], &mut k, pk, coins);
-    }
+    let k = unsafe { r5_cca_kem_encapsulate(&mut ct[0..c1_len], pk, coins) };
 
     /* Apply DEM to get second part of ct */
     round5_dem(&mut ct[c1_len..], &k, &msg);

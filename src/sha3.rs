@@ -124,7 +124,6 @@ pub struct Shake {
     rate: usize,
 }
 
-#[cfg(feature = "shake")]
 impl Shake {
     pub fn new(level: usize) -> Result<Shake, String> {
         if level != 128 && level != 256 {
