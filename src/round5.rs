@@ -267,21 +267,18 @@ unsafe fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t, mut idx: *mut [u16; 
     copy_u16(d, tmp_d.as_mut_ptr(), PARAMS_MU as usize);
 }
 
-unsafe fn shake256(out: *mut u8, len: usize, seed: *const u8, seed_len: usize) {
-    let mut shake =
-        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len)).unwrap();
-    shake.expand(std::slice::from_raw_parts_mut(out, len));
+// Creates A random for the given seed and algorithm parameters.
+fn create_A_random(A_random: &mut [modq_t], seed: &[u8]) {
+    let mut shake = crate::sha3::Shake::new(256).unwrap();
+    shake.update(&seed[0..PARAMS_KAPPA_BYTES]);
+
+    let xof = shake.finalize(A_random.len() * 2);
+
+    for i in 0..A_random.len() {
+        A_random[i] = (xof[2*i] as u16) | ((xof[2*i+1] as u16) << 8);
+    }
 }
 
-// Creates A random for the given seed and algorithm parameters.
-unsafe fn create_A_random(A_random: &mut [modq_t], seed: &[u8]) {
-    shake256(
-        A_random.as_mut_ptr() as *mut u8,
-        PARAMS_D * PARAMS_K * 2,
-        seed.as_ptr(),
-        PARAMS_KAPPA_BYTES,
-    );
-}
 // compress ND elements of q bits into p bits and pack into a byte string
 unsafe fn pack_q_p(mut pv: *mut u8, mut vq: *const modq_t, rounding_constant: modq_t) {
     let mut i: usize = 0; // pack p bits
