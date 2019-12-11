@@ -306,8 +306,9 @@ fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     sk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES]);
     create_secret_vector(&mut S_idx, &sk[0..PARAMS_KAPPA_BYTES]);
 
+    ringmul_q(&mut B, &A, &S_idx);
+
     unsafe {
-        ringmul_q(&mut B, &A, &S_idx);
         // Compress B q_bits -> p_bits, pk = sigma | B
         pack_q_p(
             pk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize),
