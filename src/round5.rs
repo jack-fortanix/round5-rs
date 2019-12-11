@@ -285,7 +285,7 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     let mut v: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
         for i in 0..PARAMS_MU {
             let j = 8*PARAMS_NDP_SIZE + PARAMS_T_BITS*i;
-            let mut t = (*ct.as_ptr().offset((j >> 3i32) as isize) as i32 >> (j & 7)) as modp_t;
+            let mut t = (ct[(j >> 3)] >> (j % 8)) as u16;
                 t = (t as i32
                     | (*ct.as_ptr().offset((j >> 3i32).wrapping_add(1) as isize) as i32)
                         << (8u8).wrapping_sub(j as u8 & 7)) as modp_t;
