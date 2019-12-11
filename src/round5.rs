@@ -109,12 +109,11 @@ fn probe_cm(v: &mut [u64], x: u16) -> bool {
 }
 
 // create a sparse ternary vector from a seed
-unsafe fn create_secret_vector(mut idx: *mut [u16; 2], mut seed: *const u8) {
+unsafe fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
     let mut v: [u64; PROBEVEC64] = [0; PROBEVEC64];
 
-    let mut shake =
-        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, PARAMS_KAPPA_BYTES))
-            .unwrap();
+    let mut shake = crate::sha3::ShakeXof::new(256, seed).unwrap();
+
     let mut index: usize = SHAKE256_RATE;
     let mut output: [u8; 136] = [0u8; 136];
     let mut i: usize = 0;
@@ -138,7 +137,7 @@ unsafe fn create_secret_vector(mut idx: *mut [u16; 2], mut seed: *const u8) {
                 break;
             }
         }
-        (*idx.offset((i >> 1i32) as isize))[(i & 1) as usize] = x;
+        (*idx.as_mut_ptr().offset((i >> 1i32) as isize))[(i & 1) as usize] = x;
         i = i.wrapping_add(1)
         // addition / subtract index
     }
@@ -321,7 +320,7 @@ unsafe fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     create_A_random(&mut A, pk); // secret key -- Random S
 
     sk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES]);
-    create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
+    create_secret_vector(&mut S_idx, &sk[0..PARAMS_KAPPA_BYTES]);
     ringmul_q(B.as_mut_ptr(), A.as_mut_ptr(), S_idx.as_mut_ptr());
     // Compress B q_bits -> p_bits, pk = sigma | B
     pack_q_p(
@@ -346,7 +345,7 @@ unsafe fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     // A from sigma
     create_A_random(&mut A, &pk); // add error correction code
     // Create R
-    create_secret_vector(R_idx.as_mut_ptr(), rho.as_ptr()); // U^T == U = A^T * R == A * R (mod q)
+    create_secret_vector(&mut R_idx, &rho); // U^T == U = A^T * R == A * R (mod q)
     ringmul_q(U_T.as_mut_ptr(), A.as_mut_ptr(), R_idx.as_mut_ptr()); // X = B^T * R == B * R (mod p)
     ringmul_p(X.as_mut_ptr(), B.as_mut_ptr(), R_idx.as_mut_ptr()); // ct = U^T | v
     pack_q_p(ct.as_mut_ptr(), U_T.as_mut_ptr(), PARAMS_H2 as i32 as modq_t);
@@ -387,7 +386,7 @@ unsafe fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     let mut v: [modp_t; 256] = [0; 256];
     let mut t: modp_t = 0;
     let mut m1 = vec![0u8; PARAMS_KAPPA_BYTES];
-    create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
+    create_secret_vector(&mut S_idx, &sk[0..PARAMS_KAPPA_BYTES]);
     unpack_p(&mut U_T, ct);
     j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
     i = 0i32 as usize;
