@@ -100,23 +100,21 @@ pub const CTEXT_BYTES: usize = (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + DEM_TAG_LE
 
 // Cache-resistant "occupancy probe". Tests and "occupies" a single slot at x.
 // Return value zero (false) indicates the slot was originally empty.
-unsafe fn probe_cm(mut v: *mut u64, x: u16) -> i32 {
+fn probe_cm(v: &mut [u64], x: u16) -> bool {
     // construct the selector
-    let y: u64 = (1u64 << (x as i32 & 0x3fi32)) as u64;
-    let mut z: u64 = (1u64 << (x as i32 >> 6i32)) as u64;
+    let y: u64 = (1u64 << (x & 0x3f));
+    let mut z: u64 = (1u64 << (x >> 6));
     let mut c: u64 = 0;
-    let mut i: usize = 0;
-    while i < PROBEVEC64 {
+    for i in 0..PROBEVEC64 {
         // always scan through all
-        let mut a: u64 = *v.offset(i as isize); // set bit if not occupied.
-        let mut b: u64 = a | y & (z & 1i32 as u64).wrapping_neg(); // If change, mask.
+        let a = v[i]; // set bit if not occupied.
+        let mut b: u64 = a | y & (z & 1u64).wrapping_neg(); // If change, mask.
         c |= a ^ b; // update value of v[i]
-        *v.offset(i as isize) = b;
-        z >>= 1i32;
-        i = i.wrapping_add(1)
+        v[i] = b;
+        z >>= 1;
     }
     // final comparison doesn't need to be constant time
-    return (c == 0i32 as u64) as i32;
+    return (c == 0);
     // return true if was occupied before
 }
 // create a sparse ternary vector from a seed
@@ -146,7 +144,7 @@ unsafe fn create_secret_vector(mut idx: *mut [u16; 2], mut seed: *const u8) {
                 }
             }
             x = (x as i32 / PARAMS_RS_DIV as i32) as u16;
-            if !(probe_cm(v.as_mut_ptr(), x) != 0) {
+            if probe_cm(&mut v, x) == false {
                 break;
             }
         }
