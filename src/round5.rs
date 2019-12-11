@@ -520,7 +520,7 @@ pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
     sk[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES].copy_from_slice(&coins[64..]);
     sk[2*PARAMS_KAPPA_BYTES..].copy_from_slice(&pk);
 
-    return (pk,sk)
+    return (sk,pk)
 }
 
 unsafe fn r5_cca_kem_encapsulate(
