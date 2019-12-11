@@ -522,23 +522,24 @@ pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
 }
 
 unsafe fn r5_cca_kem_encapsulate(
-    mut ct: *mut u8,
-    mut k: *mut u8,
-    mut pk: *const u8,
-    mut coins: *const u8,
+    ct: &mut [u8],
+    k: &mut [u8],
+    pk: &[u8],
+    coins: &[u8],
 ) -> i32 {
     let mut hash_in: [u8; 1541] = [0; 1541];
     let mut L_g_rho: [[u8; PARAMS_KAPPA_BYTES]; 3] = [[0; PARAMS_KAPPA_BYTES]; 3];
+
     copy_u8(
         hash_in.as_mut_ptr(),
-        coins,
+        coins.as_ptr(),
         PARAMS_KAPPA_BYTES,
     );
     copy_u8(
         hash_in
             .as_mut_ptr()
             .offset(PARAMS_KAPPA_BYTES as isize),
-        pk,
+        pk.as_ptr(),
         PARAMS_PK_SIZE,
     );
     shake256(
@@ -548,10 +549,10 @@ unsafe fn r5_cca_kem_encapsulate(
         (PARAMS_KAPPA_BYTES as i32 + PARAMS_PK_SIZE as i32) as usize,
     );
     /* Encrypt  */
-    r5_cpa_pke_encrypt(ct, pk, coins, L_g_rho[2].as_mut_ptr()); // m: ct = (U,v)
+    r5_cpa_pke_encrypt(ct.as_mut_ptr(), pk.as_ptr(), coins.as_ptr(), L_g_rho[2].as_mut_ptr()); // m: ct = (U,v)
                                                                 /* Append g: ct = (U,v,g) */
     copy_u8(
-        ct.offset(PARAMS_CT_SIZE as isize),
+        ct.as_mut_ptr().offset(PARAMS_CT_SIZE as isize),
         L_g_rho[1].as_mut_ptr(),
         PARAMS_KAPPA_BYTES,
     );
@@ -565,11 +566,11 @@ unsafe fn r5_cca_kem_encapsulate(
         hash_in
             .as_mut_ptr()
             .offset(PARAMS_KAPPA_BYTES as isize),
-        ct,
+        ct.as_ptr(),
         (PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize,
     );
     shake256(
-        k,
+        k.as_mut_ptr(),
         PARAMS_KAPPA_BYTES,
         hash_in.as_mut_ptr(),
         (PARAMS_KAPPA_BYTES as i32 + PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize,
@@ -600,7 +601,7 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
     let mut k: [u8; 32] = [0; 32];
 
     unsafe {
-        r5_cca_kem_encapsulate(ct.as_mut_ptr(), k.as_mut_ptr(), pk.as_ptr(), coins.as_ptr());
+        r5_cca_kem_encapsulate(&mut ct[0..c1_len], &mut k, pk, coins);
     }
 
     /* Apply DEM to get second part of ct */
