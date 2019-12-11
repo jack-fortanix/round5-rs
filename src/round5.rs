@@ -1,8 +1,4 @@
-#![allow(
-    non_camel_case_types,
-    non_snake_case,
-    non_upper_case_globals,
-)]
+#![allow(non_snake_case)]
 
 use mbedtls::cipher::*;
 
@@ -98,7 +94,7 @@ fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
     let mut index: usize = SHAKE256_RATE;
     let mut output: [u8; SHAKE256_RATE] = [0u8; SHAKE256_RATE];
     for i in 0..PARAMS_H {
-        let mut x: u16 = 0;
+        let mut x: u16;
         loop {
             loop {
                 if index >= SHAKE256_RATE {
@@ -233,7 +229,7 @@ fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     );
 }
 
-fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
+fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     let mut A: [u16; PARAMS_ND] = [0; PARAMS_ND];
     let mut R_idx: [[u16; 2]; 111] = [[0; 2]; 111];
     let mut U_T: [u16; PARAMS_ND] = [0; PARAMS_ND];
@@ -290,8 +286,9 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     for i in 0..PARAMS_MU {
         // v - X' as mod p value (to be able to perform the rounding!)
         let mut x_p = ((v[i]) << (PARAMS_P_BITS - PARAMS_T_BITS)).wrapping_sub(X_prime[i]);
-        x_p = x_p.wrapping_add(PARAMS_H3) >> (PARAMS_P_BITS - PARAMS_B_BITS) & ((1u16 << PARAMS_B_BITS) - 1);
-        m1[(i*PARAMS_B_BITS) >> 3] |= (x_p << ((i * PARAMS_B_BITS) % 8)) as u8;
+        x_p = x_p.wrapping_add(PARAMS_H3) >> (PARAMS_P_BITS - PARAMS_B_BITS)
+            & ((1u16 << PARAMS_B_BITS) - 1);
+        m1[(i * PARAMS_B_BITS) >> 3] |= (x_p << ((i * PARAMS_B_BITS) % 8)) as u8;
     }
     return m1;
 }
