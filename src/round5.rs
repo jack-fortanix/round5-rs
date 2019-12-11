@@ -65,8 +65,8 @@ const PARAMS_ND: usize = 1170;
 const PARAMS_NDP_SIZE: usize = 1317;
 const PARAMS_H: usize = 222;
 const PROBEVEC64: usize = 19;
-const PARAMS_RS_DIV: usize = 56;
-const PARAMS_RS_LIM: usize = 65520;
+const PARAMS_RS_DIV: u16 = 56;
+const PARAMS_RS_LIM: u16 = 65520;
 
 const PARAMS_K: usize = 1;
 const PARAMS_D: usize = 1170;
@@ -109,15 +109,14 @@ fn probe_cm(v: &mut [u64], x: u16) -> bool {
 }
 
 // create a sparse ternary vector from a seed
-unsafe fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
+fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
     let mut v: [u64; PROBEVEC64] = [0; PROBEVEC64];
 
     let mut shake = crate::sha3::ShakeXof::new(256, seed).unwrap();
 
     let mut index: usize = SHAKE256_RATE;
-    let mut output: [u8; 136] = [0u8; 136];
-    let mut i: usize = 0;
-    while i < PARAMS_H {
+    let mut output: [u8; SHAKE256_RATE] = [0u8; SHAKE256_RATE];
+    for i in 0..PARAMS_H {
         let mut x: u16 = 0;
         loop {
             loop {
@@ -127,19 +126,17 @@ unsafe fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
                 }
                 x = (output[index] as i32 | (output[index.wrapping_add(1) as usize] as i32) << 8i32)
                     as u16;
-                index = (index as u64).wrapping_add(2i32 as u64) as usize;
-                if !(x as i32 >= PARAMS_RS_LIM as i32) {
+                index += 2;
+                if x < PARAMS_RS_LIM {
                     break;
                 }
             }
-            x = (x as i32 / PARAMS_RS_DIV as i32) as u16;
+            x = x / PARAMS_RS_DIV;
             if probe_cm(&mut v, x) == false {
                 break;
             }
         }
-        (*idx.as_mut_ptr().offset((i >> 1i32) as isize))[(i & 1) as usize] = x;
-        i = i.wrapping_add(1)
-        // addition / subtract index
+        idx[i >> 1][i % 2] = x;
     }
 }
 // multiplication mod q, result length n
