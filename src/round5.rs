@@ -296,9 +296,7 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
         // v - X' as mod p value (to be able to perform the rounding!)
         let mut x_p = ((v[i]) << (PARAMS_P_BITS - PARAMS_T_BITS)).wrapping_sub(X_prime[i]);
         x_p = x_p.wrapping_add(PARAMS_H3) >> (PARAMS_P_BITS - PARAMS_B_BITS) & ((1u16 << PARAMS_B_BITS) - 1);
-        m1[(i.wrapping_mul(PARAMS_B_BITS as usize) >> 3i32) as usize] =
-            (m1[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
-                | (x_p as i32) << (i.wrapping_mul(PARAMS_B_BITS) & 7)) as u8;
+        m1[(i*PARAMS_B_BITS) >> 3] |= (x_p << ((i * PARAMS_B_BITS) % 8)) as u8;
     }
     return m1;
 }
