@@ -29,7 +29,7 @@ fn constant_time_memcmp(a: &[u8], b: &[u8]) -> u8 {
 
     let mut z = 0u8;
     for i in 0..a.len() {
-        z |= (a[i] ^ b[i]);
+        z |= a[i] ^ b[i];
     }
 
     // now fold down to 0/1 bit
@@ -405,7 +405,7 @@ unsafe fn r5_cpa_pke_encrypt(
     }
     return 0i32;
 }
-unsafe fn r5_cpa_pke_decrypt(mut m: *mut u8, mut sk: *const u8, mut ct: *const u8) -> i32 {
+unsafe fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
@@ -413,19 +413,16 @@ unsafe fn r5_cpa_pke_decrypt(mut m: *mut u8, mut sk: *const u8, mut ct: *const u
     let mut v: [modp_t; 256] = [0; 256];
     let mut t: modp_t = 0;
     let mut X_prime: [modp_t; 256] = [0; 256];
-    let mut m1: [u8; 32] = [
-        0i32 as u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0,
-    ];
-    create_secret_vector(S_idx.as_mut_ptr(), sk);
-    unpack_p(U_T.as_mut_ptr(), ct);
+    let mut m1 = vec![0u8; PARAMS_KAPPA_BYTES];
+    create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
+    unpack_p(U_T.as_mut_ptr(), ct.as_ptr());
     j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
     i = 0i32 as usize;
     while i < PARAMS_MU {
-        t = (*ct.offset((j >> 3i32) as isize) as i32 >> (j & 7)) as modp_t;
+        t = (*ct.as_ptr().offset((j >> 3i32) as isize) as i32 >> (j & 7)) as modp_t;
         if (j & 7).wrapping_add(PARAMS_T_BITS) > 8 {
             t = (t as i32
-                | (*ct.offset((j >> 3i32).wrapping_add(1) as isize) as i32)
+                | (*ct.as_ptr().offset((j >> 3i32).wrapping_add(1) as isize) as i32)
                     << (8u8).wrapping_sub(j as u8 & 7)) as modp_t
         }
         v[i as usize] = (t as i32 & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t;
@@ -447,8 +444,7 @@ unsafe fn r5_cpa_pke_decrypt(mut m: *mut u8, mut sk: *const u8, mut ct: *const u
                 | (x_p as i32) << (i.wrapping_mul(PARAMS_B_BITS) & 7)) as u8;
         i = i.wrapping_add(1)
     }
-    copy_u8(m, m1.as_mut_ptr(), PARAMS_KAPPA_BYTES);
-    return 0i32;
+    return m1;
 }
 
 fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) {
@@ -562,16 +558,14 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
 }
 
 fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
-    let mut coins: [u8; PARAMS_KAPPA_BYTES] = [0; PARAMS_KAPPA_BYTES];
-    let mut ct_prime: [u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES] = [0; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES];
-    unsafe {
-        r5_cpa_pke_decrypt(coins.as_mut_ptr(), sk.as_ptr(), ct.as_ptr());
-    }
+    let coins = unsafe { r5_cpa_pke_decrypt(sk, ct) };
 
     let mut shake = crate::sha3::Shake::new(256).unwrap();
     shake.update(&coins[0..PARAMS_KAPPA_BYTES]);
     shake.update(&sk[2*PARAMS_KAPPA_BYTES..]);
     let L_g_rho_prime = shake.finalize(3*PARAMS_KAPPA_BYTES);
+
+    let mut ct_prime: [u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES] = [0; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES];
 
     // Encrypt m: ct' = (U',v')
     unsafe {
