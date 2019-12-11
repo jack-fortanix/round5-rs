@@ -124,8 +124,7 @@ fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
                     shake.expand(&mut output);
                     index = 0;
                 }
-                x = (output[index] as i32 | (output[index.wrapping_add(1) as usize] as i32) << 8i32)
-                    as u16;
+                x = (output[index] as u16) | ((output[index+1] as u16) << 8);
                 index += 2;
                 if x < PARAMS_RS_LIM {
                     break;
