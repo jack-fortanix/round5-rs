@@ -542,26 +542,25 @@ unsafe fn round5_dem_inverse(
  * @return __0__ in case of success
  */
 
-pub unsafe fn crypto_encrypt_keypair(
-    mut pk: *mut u8,
-    mut sk: *mut u8,
-    mut coins: *const u8,
-) -> i32 {
+pub unsafe fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let mut pk = vec![0u8; PUBLICKEYBYTES];
+    let mut sk = vec![0u8; SECRETKEYBYTES];
     /* Generate the base key pair */
-    r5_cpa_pke_keygen(pk, sk, coins);
+    r5_cpa_pke_keygen(pk.as_mut_ptr(), sk.as_mut_ptr(), coins.as_ptr());
     /* Append y and pk to sk */
     copy_u8(
-        sk.offset(PARAMS_KAPPA_BYTES as i32 as isize),
-        &*coins.offset(64),
+        sk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as i32 as isize),
+        coins.as_ptr().offset(64),
         PARAMS_KAPPA_BYTES as i32 as usize,
     ); // G: (l | g | rho) = h(coins | pk);
     copy_u8(
-        sk.offset(PARAMS_KAPPA_BYTES as i32 as isize)
+        sk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as i32 as isize)
             .offset(PARAMS_KAPPA_BYTES as i32 as isize),
-        pk,
+        pk.as_ptr(),
         PARAMS_PK_SIZE as i32 as usize,
     );
-    return 0i32;
+
+    return (pk,sk)
 }
 unsafe fn r5_cca_kem_encapsulate(
     mut ct: *mut u8,
