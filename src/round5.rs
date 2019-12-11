@@ -11,8 +11,6 @@ use mbedtls::cipher::*;
 
 extern "C" {
     #[no_mangle]
-    fn copy_u8(out: *mut u8, in_0: *const u8, len: usize);
-    #[no_mangle]
     fn copy_u16(out: *mut u16, in_0: *const u16, len: usize);
 }
 
