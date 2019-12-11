@@ -86,8 +86,7 @@ const SHAKE256_RATE: usize = 136;
 
 unsafe fn shake256(out: *mut u8, len: usize, seed: *const u8, seed_len: usize) {
     let mut shake =
-        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len))
-            .unwrap();
+        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len)).unwrap();
     shake.expand(std::slice::from_raw_parts_mut(out, len));
 }
 
@@ -135,8 +134,7 @@ unsafe fn create_secret_vector(mut idx: *mut [u16; 2], mut seed: *const u8) {
                     shake.expand(&mut output);
                     index = 0;
                 }
-                x = (output[index] as i32
-                    | (output[index.wrapping_add(1) as usize] as i32) << 8i32)
+                x = (output[index] as i32 | (output[index.wrapping_add(1) as usize] as i32) << 8i32)
                     as u16;
                 index = (index as u64).wrapping_add(2i32 as u64) as usize;
                 if !(x as i32 >= PARAMS_RS_LIM as i32) {
@@ -337,7 +335,7 @@ unsafe fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     // A from sigma
     create_A_random(A.as_mut_ptr(), pk.as_ptr()); // secret key -- Random S
 
-    sk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES]);
+    sk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES]);
     create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
     ringmul_q(B.as_mut_ptr(), A.as_mut_ptr(), S_idx.as_mut_ptr());
     // Compress B q_bits -> p_bits, pk = sigma | B
@@ -365,10 +363,7 @@ unsafe fn r5_cpa_pke_encrypt(
     let mut t: modp_t = 0;
     let mut tm: modp_t = 0;
     // unpack public key
-    unpack_p(
-        B.as_mut_ptr(),
-        pk.offset(PARAMS_KAPPA_BYTES as isize),
-    );
+    unpack_p(B.as_mut_ptr(), pk.offset(PARAMS_KAPPA_BYTES as isize));
     // A from sigma
     create_A_random(A.as_mut_ptr(), pk); // add error correction code
     copy_u8(m1.as_mut_ptr(), m, PARAMS_KAPPA_BYTES);
@@ -515,39 +510,41 @@ pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
     }
     /* Append y and pk to sk */
 
-    sk[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES].copy_from_slice(&coins[64..]);
-    sk[2*PARAMS_KAPPA_BYTES..].copy_from_slice(&pk);
+    sk[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES].copy_from_slice(&coins[64..]);
+    sk[2 * PARAMS_KAPPA_BYTES..].copy_from_slice(&pk);
 
-    return (sk,pk)
+    return (sk, pk);
 }
 
-fn r5_cca_kem_encapsulate(
-    ct: &mut [u8],
-    pk: &[u8],
-    coins: &[u8]) -> Vec<u8> {
+fn r5_cca_kem_encapsulate(ct: &mut [u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
     let mut shake = crate::sha3::Shake::new(256).unwrap();
 
     shake.update(coins);
     shake.update(pk);
 
-    let L_g_rho = shake.finalize(3*PARAMS_KAPPA_BYTES);
+    let L_g_rho = shake.finalize(3 * PARAMS_KAPPA_BYTES);
 
     /* Encrypt  */
     unsafe {
-        r5_cpa_pke_encrypt(ct.as_mut_ptr(), pk.as_ptr(), coins.as_ptr(), L_g_rho[64..].as_ptr()); // m: ct = (U,v)
+        r5_cpa_pke_encrypt(
+            ct.as_mut_ptr(),
+            pk.as_ptr(),
+            coins.as_ptr(),
+            L_g_rho[64..].as_ptr(),
+        ); // m: ct = (U,v)
     }
 
     /* Append g: ct = (U,v,g) */
-    ct[PARAMS_CT_SIZE..PARAMS_CT_SIZE+PARAMS_KAPPA_BYTES].copy_from_slice(&L_g_rho[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES]);
+    ct[PARAMS_CT_SIZE..PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES]
+        .copy_from_slice(&L_g_rho[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES]);
 
     /* k = H(L, ct) */
     shake.update(&L_g_rho[0..32]);
-    shake.update(&ct[0..PARAMS_CT_SIZE+PARAMS_KAPPA_BYTES]);
+    shake.update(&ct[0..PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES]);
     return shake.finalize(PARAMS_KAPPA_BYTES);
 }
 
 pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
-
     if coins.len() != 32 {
         return Vec::new();
     }
@@ -574,8 +571,8 @@ unsafe fn r5_cca_kem_decapsulate(k: &mut [u8], ct: &[u8], sk: &[u8]) -> i32 {
 
     hash_in[0..PARAMS_KAPPA_BYTES].copy_from_slice(&m_prime[0..PARAMS_KAPPA_BYTES]);
 
-    hash_in[PARAMS_KAPPA_BYTES..PARAMS_KAPPA_BYTES+PARAMS_PK_SIZE].copy_from_slice(
-        &sk[2*PARAMS_KAPPA_BYTES..]);
+    hash_in[PARAMS_KAPPA_BYTES..PARAMS_KAPPA_BYTES + PARAMS_PK_SIZE]
+        .copy_from_slice(&sk[2 * PARAMS_KAPPA_BYTES..]);
 
     shake256(
         L_g_rho_prime.as_mut_ptr() as *mut u8,
@@ -586,7 +583,7 @@ unsafe fn r5_cca_kem_decapsulate(k: &mut [u8], ct: &[u8], sk: &[u8]) -> i32 {
     // Encrypt m: ct' = (U',v')
     r5_cpa_pke_encrypt(
         ct_prime.as_mut_ptr(),
-        sk.as_ptr().offset(2*PARAMS_KAPPA_BYTES as isize),
+        sk.as_ptr().offset(2 * PARAMS_KAPPA_BYTES as isize),
         m_prime.as_mut_ptr(),
         L_g_rho_prime[2].as_ptr(),
     );
@@ -608,12 +605,12 @@ unsafe fn r5_cca_kem_decapsulate(k: &mut [u8], ct: &[u8], sk: &[u8]) -> i32 {
         PARAMS_KAPPA_BYTES,
         fail,
     );
-    hash_in[PARAMS_KAPPA_BYTES..PARAMS_CT_SIZE+PARAMS_KAPPA_BYTES*2].copy_from_slice(&ct_prime);
+    hash_in[PARAMS_KAPPA_BYTES..PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES * 2].copy_from_slice(&ct_prime);
     shake256(
         k.as_mut_ptr(),
         PARAMS_KAPPA_BYTES,
         hash_in.as_ptr(),
-        PARAMS_KAPPA_BYTES  + PARAMS_CT_SIZE  + PARAMS_KAPPA_BYTES,
+        PARAMS_KAPPA_BYTES + PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES,
     );
     return 0i32;
 }
