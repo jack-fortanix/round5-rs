@@ -100,6 +100,12 @@ pub fn all_kats() {
             Ok(r) => { assert_eq!(r.to_hex(), kat.msg.to_hex()); }
 
         assert_eq!(result.len(), 0);
-*/
+
+        if result.len() > 0 {
+            assert_eq!(result.to_hex(), kat.msg.to_hex());
+        } else {
+            assert_eq!(result.len(), 0);
+        }
+         */
     }
 }

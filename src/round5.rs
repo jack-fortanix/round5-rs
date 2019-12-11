@@ -562,14 +562,14 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
 }
 
 fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
-    let mut m_prime: [u8; PARAMS_KAPPA_BYTES] = [0; PARAMS_KAPPA_BYTES];
+    let mut coins: [u8; PARAMS_KAPPA_BYTES] = [0; PARAMS_KAPPA_BYTES];
     let mut ct_prime: [u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES] = [0; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES];
     unsafe {
-        r5_cpa_pke_decrypt(m_prime.as_mut_ptr(), sk.as_ptr(), ct.as_ptr());
+        r5_cpa_pke_decrypt(coins.as_mut_ptr(), sk.as_ptr(), ct.as_ptr());
     }
 
     let mut shake = crate::sha3::Shake::new(256).unwrap();
-    shake.update(&m_prime[0..PARAMS_KAPPA_BYTES]);
+    shake.update(&coins[0..PARAMS_KAPPA_BYTES]);
     shake.update(&sk[2*PARAMS_KAPPA_BYTES..]);
     let L_g_rho_prime = shake.finalize(3*PARAMS_KAPPA_BYTES);
 
@@ -578,7 +578,7 @@ fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
         r5_cpa_pke_encrypt(
             ct_prime.as_mut_ptr(),
             sk.as_ptr().offset(2 * PARAMS_KAPPA_BYTES as isize),
-            m_prime.as_mut_ptr(),
+            coins.as_ptr(),
             L_g_rho_prime[2*PARAMS_KAPPA_BYTES..].as_ptr(),
         );
     }
