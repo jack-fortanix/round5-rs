@@ -255,28 +255,21 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     pack_q_p(&mut ct[0..PARAMS_NDP_SIZE], &U_T, PARAMS_H2);
     ct[PARAMS_NDP_SIZE..PARAMS_MUT_SIZE + PARAMS_NDP_SIZE].copy_from_slice(&[0; PARAMS_MUT_SIZE]);
 
-    unsafe {
-        for i in 0..PARAMS_MU {
-            let j = 8*PARAMS_NDP_SIZE + PARAMS_T_BITS*i;
-        let mut tm: modp_t = 0;
+    for i in 0..PARAMS_MU {
+        let j = 8 * PARAMS_NDP_SIZE + PARAMS_T_BITS * i;
         // compute, pack v
         // compress p->t
-            let mut t = X[i].wrapping_add(PARAMS_H2) >> (PARAMS_P_BITS - PARAMS_T_BITS);
+        let mut t = X[i].wrapping_add(PARAMS_H2) >> (PARAMS_P_BITS - PARAMS_T_BITS);
         // add message
-        tm = (m[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
+        let tm = (m[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
             >> (i.wrapping_mul(PARAMS_B_BITS) & 7)) as modp_t; // pack t bits
         t = ((t as i32
             + ((tm as i32 & (1i32 << PARAMS_B_BITS as i32) - 1i32)
                 << PARAMS_T_BITS as i32 - PARAMS_B_BITS as i32)) as modp_t as i32
             & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t; // ct = U^T | v
-        *ct.as_mut_ptr().offset((j >> 3i32) as isize) =
-            (*ct.as_mut_ptr().offset((j >> 3i32) as isize) as i32 | (t as i32) << (j & 7)) as u8; // unpack t bits
-        if (j & 7).wrapping_add(PARAMS_T_BITS) > 8 {
-            *ct.as_mut_ptr().offset((j >> 3i32).wrapping_add(1) as isize) =
-                (*ct.as_mut_ptr().offset((j >> 3i32).wrapping_add(1) as isize) as i32
-                    | t as i32 >> (8u8).wrapping_sub(j as u8 & 7)) as u8
-        } // X' = S^T * U == U^T * S (mod p)
-    }
+        ct[(j >> 3)] = (ct[(j >> 3)] as i32 | (t as i32) << (j & 7)) as u8; // unpack t bits
+        ct[(j >> 3) + 1] =
+            (ct[(j >> 3) + 1] as i32 | t as i32 >> (8u8).wrapping_sub(j as u8 & 7)) as u8
     }
 }
 fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
@@ -290,35 +283,35 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     create_secret_vector(&mut S_idx, &sk[0..PARAMS_KAPPA_BYTES]);
     unpack_p(&mut U_T, ct);
     unsafe {
-    j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
-    i = 0i32 as usize;
-    while i < PARAMS_MU {
-        t = (*ct.as_ptr().offset((j >> 3i32) as isize) as i32 >> (j & 7)) as modp_t;
-        if (j & 7).wrapping_add(PARAMS_T_BITS) > 8 {
-            t = (t as i32
-                | (*ct.as_ptr().offset((j >> 3i32).wrapping_add(1) as isize) as i32)
-                    << (8u8).wrapping_sub(j as u8 & 7)) as modp_t
+        j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
+        i = 0i32 as usize;
+        while i < PARAMS_MU {
+            t = (*ct.as_ptr().offset((j >> 3i32) as isize) as i32 >> (j & 7)) as modp_t;
+            if (j & 7).wrapping_add(PARAMS_T_BITS) > 8 {
+                t = (t as i32
+                    | (*ct.as_ptr().offset((j >> 3i32).wrapping_add(1) as isize) as i32)
+                        << (8u8).wrapping_sub(j as u8 & 7)) as modp_t
+            }
+            v[i as usize] = (t as i32 & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t;
+            j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
+            i = i.wrapping_add(1)
         }
-        v[i as usize] = (t as i32 & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t;
-        j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
-        i = i.wrapping_add(1)
-    }
-    let mut X_prime: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
-    ringmul_p(&mut X_prime, &U_T, &S_idx);
-    // X' = v - X', compressed to 1 bit
-    let mut x_p: modp_t = 0;
-    i = 0i32 as usize;
-    while i < PARAMS_MU {
-        // v - X' as mod p value (to be able to perform the rounding!)
-        x_p = (((v[i as usize] as i32) << PARAMS_P_BITS as i32 - PARAMS_T_BITS as i32)
-            - X_prime[i as usize] as i32) as modp_t;
-        x_p = (x_p as i32 + PARAMS_H3 as i32 >> PARAMS_P_BITS as i32 - PARAMS_B_BITS as i32
-            & (1i32 << PARAMS_B_BITS as i32) - 1i32) as modp_t;
-        m1[(i.wrapping_mul(PARAMS_B_BITS as usize) >> 3i32) as usize] =
-            (m1[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
-                | (x_p as i32) << (i.wrapping_mul(PARAMS_B_BITS) & 7)) as u8;
-        i = i.wrapping_add(1)
-    }
+        let mut X_prime: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
+        ringmul_p(&mut X_prime, &U_T, &S_idx);
+        // X' = v - X', compressed to 1 bit
+        let mut x_p: modp_t = 0;
+        i = 0i32 as usize;
+        while i < PARAMS_MU {
+            // v - X' as mod p value (to be able to perform the rounding!)
+            x_p = (((v[i as usize] as i32) << PARAMS_P_BITS as i32 - PARAMS_T_BITS as i32)
+                - X_prime[i as usize] as i32) as modp_t;
+            x_p = (x_p as i32 + PARAMS_H3 as i32 >> PARAMS_P_BITS as i32 - PARAMS_B_BITS as i32
+                & (1i32 << PARAMS_B_BITS as i32) - 1i32) as modp_t;
+            m1[(i.wrapping_mul(PARAMS_B_BITS as usize) >> 3i32) as usize] =
+                (m1[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
+                    | (x_p as i32) << (i.wrapping_mul(PARAMS_B_BITS) & 7)) as u8;
+            i = i.wrapping_add(1)
+        }
     }
     return m1;
 }
@@ -426,11 +419,12 @@ fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
         [0; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES];
 
     // Encrypt m: ct' = (U',v')
-    r5_cpa_pke_encrypt(&mut ct_prime,
-            &sk[2 * PARAMS_KAPPA_BYTES..],
-            &coins,
-            &L_g_rho_prime[2 * PARAMS_KAPPA_BYTES..],
-        );
+    r5_cpa_pke_encrypt(
+        &mut ct_prime,
+        &sk[2 * PARAMS_KAPPA_BYTES..],
+        &coins,
+        &L_g_rho_prime[2 * PARAMS_KAPPA_BYTES..],
+    );
 
     // ct' = (U',v',g')
     ct_prime[PARAMS_CT_SIZE..]
