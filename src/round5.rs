@@ -521,58 +521,30 @@ pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
     return (sk,pk)
 }
 
-unsafe fn r5_cca_kem_encapsulate(
+fn r5_cca_kem_encapsulate(
     ct: &mut [u8],
     pk: &[u8],
-    coins: &[u8],
-) -> Vec<u8> {
-    let mut hash_in: [u8; 1541] = [0; 1541];
-    let mut L_g_rho: [[u8; PARAMS_KAPPA_BYTES]; 3] = [[0; PARAMS_KAPPA_BYTES]; 3];
-
+    coins: &[u8]) -> Vec<u8> {
     let mut shake = crate::sha3::Shake::new(256).unwrap();
 
-    copy_u8(
-        hash_in.as_mut_ptr(),
-        coins.as_ptr(),
-        PARAMS_KAPPA_BYTES,
-    );
-    copy_u8(
-        hash_in
-            .as_mut_ptr()
-            .offset(PARAMS_KAPPA_BYTES as isize),
-        pk.as_ptr(),
-        PARAMS_PK_SIZE,
-    );
-    shake256(
-        L_g_rho.as_mut_ptr() as *mut u8,
-        (3i32 * PARAMS_KAPPA_BYTES as i32) as usize,
-        hash_in.as_ptr(),
-        (PARAMS_KAPPA_BYTES as i32 + PARAMS_PK_SIZE as i32) as usize,
-    );
-    /* Encrypt  */
-    r5_cpa_pke_encrypt(ct.as_mut_ptr(), pk.as_ptr(), coins.as_ptr(), L_g_rho[2].as_mut_ptr()); // m: ct = (U,v)
-                                                                /* Append g: ct = (U,v,g) */
-    copy_u8(
-        ct.as_mut_ptr().offset(PARAMS_CT_SIZE as isize),
-        L_g_rho[1].as_mut_ptr(),
-        PARAMS_KAPPA_BYTES,
-    );
-    /* k = H(L, ct) */
+    shake.update(coins);
+    shake.update(pk);
 
-    shake.update(&L_g_rho[0]);
+    let L_g_rho = shake.finalize(3*PARAMS_KAPPA_BYTES);
+
+    /* Encrypt  */
+    unsafe {
+        r5_cpa_pke_encrypt(ct.as_mut_ptr(), pk.as_ptr(), coins.as_ptr(), L_g_rho[64..].as_ptr()); // m: ct = (U,v)
+    }
+
+    /* Append g: ct = (U,v,g) */
+    ct[PARAMS_CT_SIZE..PARAMS_CT_SIZE+PARAMS_KAPPA_BYTES].copy_from_slice(&L_g_rho[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES]);
+
+    /* k = H(L, ct) */
+    shake.update(&L_g_rho[0..32]);
     shake.update(&ct[0..PARAMS_CT_SIZE+PARAMS_KAPPA_BYTES]);
     return shake.finalize(PARAMS_KAPPA_BYTES);
 }
-/* *
- * Encrypts a message.
- *
- * @param[out] ct     the encrypted message
- * @param[out] ct_len the length of the encrypted message (`CRYPTO_CIPHERTEXTBYTES` + `m_len`)
- * @param[in]  m      the message to encrypt
- * @param[in]  m_len  the length of the message to encrypt
- * @param[in]  pk     the public key to use for the encryption
- * @return __0__ in case of success
- */
 
 pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
 
@@ -586,12 +558,13 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
 
     let mut k: [u8; 32] = [0; 32];
 
-    let k = unsafe { r5_cca_kem_encapsulate(&mut ct[0..c1_len], pk, coins) };
+    let k = r5_cca_kem_encapsulate(&mut ct[0..c1_len], pk, coins);
 
     /* Apply DEM to get second part of ct */
     round5_dem(&mut ct[c1_len..], &k, &msg);
     return ct;
 }
+
 unsafe fn r5_cca_kem_decapsulate(k: &mut [u8], ct: &[u8], sk: &[u8]) -> i32 {
     let mut hash_in: [u8; 1541] = [0; 1541];
     let mut m_prime: [u8; 32] = [0; 32];
