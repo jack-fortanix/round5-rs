@@ -15,8 +15,6 @@ extern "C" {
     #[no_mangle]
     fn copy_u16(out: *mut u16, in_0: *const u16, len: usize);
     #[no_mangle]
-    fn zero_u8(out: *mut u8, len: usize);
-    #[no_mangle]
     fn zero_u16(out: *mut u16, len: usize);
 }
 
@@ -320,10 +318,7 @@ unsafe fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8])
     ringmul_q(&mut U_T, &A, &R_idx); // X = B^T * R == B * R (mod p)
     ringmul_p(X.as_mut_ptr(), B.as_mut_ptr(), R_idx.as_mut_ptr()); // ct = U^T | v
     pack_q_p(&mut ct[0..PARAMS_NDP_SIZE], &U_T, PARAMS_H2);
-    zero_u8(
-        ct.as_mut_ptr().offset(PARAMS_NDP_SIZE as isize),
-        PARAMS_MUT_SIZE as usize,
-    );
+    ct[PARAMS_NDP_SIZE..PARAMS_MUT_SIZE+PARAMS_NDP_SIZE].copy_from_slice(&[0; PARAMS_MUT_SIZE]);
     j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
     i = 0i32 as usize;
     while i < PARAMS_MU {
