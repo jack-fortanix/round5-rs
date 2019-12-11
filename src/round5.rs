@@ -81,9 +81,9 @@ const SHAKE256_RATE: usize = 136;
 
 unsafe fn shake256(out: *mut u8, len: usize, seed: *const u8, seed_len: usize) {
     let mut shake =
-        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len as usize))
+        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len))
             .unwrap();
-    shake.expand(std::slice::from_raw_parts_mut(out, len as usize));
+    shake.expand(std::slice::from_raw_parts_mut(out, len));
 }
 
 // CCA_PKE Variant
@@ -121,21 +121,21 @@ unsafe fn create_secret_vector(mut idx: *mut [u16; 2], mut seed: *const u8) {
     let mut shake =
         crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, PARAMS_KAPPA_BYTES))
             .unwrap();
-    let mut index: usize = SHAKE256_RATE as usize;
+    let mut index: usize = SHAKE256_RATE;
     let mut output: [u8; 136] = [0u8; 136];
-    let mut i: usize = 0i32 as usize;
+    let mut i: usize = 0;
     while i < PARAMS_H {
         let mut x: u16 = 0;
         loop {
             loop {
                 if index >= SHAKE256_RATE {
                     shake.expand(&mut output);
-                    index = 0i32 as usize
+                    index = 0;
                 }
-                x = (output[index as usize] as i32
+                x = (output[index] as i32
                     | (output[index.wrapping_add(1) as usize] as i32) << 8i32)
                     as u16;
-                index = (index as u64).wrapping_add(2i32 as u64) as usize as usize;
+                index = (index as u64).wrapping_add(2i32 as u64) as usize;
                 if !(x as i32 >= PARAMS_RS_LIM as i32) {
                     break;
                 }
@@ -302,7 +302,7 @@ unsafe fn pack_q_p(mut pv: *mut u8, mut vq: *const modq_t, rounding_constant: mo
                 (*pv.offset((j >> 3).wrapping_add(1) as isize) as i32
                     | t as i32 >> (8u8).wrapping_sub(j as u8 & 7)) as u8
         }
-        j = (j as u64).wrapping_add(PARAMS_P_BITS as i32 as u64) as usize as usize;
+        j = (j as u64).wrapping_add(PARAMS_P_BITS as i32 as u64) as usize;
         i = i.wrapping_add(1)
     }
 }
@@ -321,7 +321,7 @@ unsafe fn unpack_p(mut vp: *mut modp_t, mut pv: *const u8) {
                     << (8u8).wrapping_sub(j as u8 & 7)) as modp_t
         }
         *vp.offset(i as isize) = (t as i32 & PARAMS_P as i32 - 1i32) as modp_t;
-        j = (j as u64).wrapping_add(PARAMS_P_BITS as i32 as u64) as usize as usize;
+        j = (j as u64).wrapping_add(PARAMS_P_BITS as i32 as u64) as usize;
         i = i.wrapping_add(1)
     }
 }
@@ -402,7 +402,7 @@ unsafe fn r5_cpa_pke_encrypt(
                 (*ct.offset((j >> 3i32).wrapping_add(1) as isize) as i32
                     | t as i32 >> (8u8).wrapping_sub(j as u8 & 7)) as u8
         } // X' = S^T * U == U^T * S (mod p)
-        j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize as usize;
+        j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
         i = i.wrapping_add(1)
     }
     return 0i32;
@@ -431,7 +431,7 @@ unsafe fn r5_cpa_pke_decrypt(mut m: *mut u8, mut sk: *const u8, mut ct: *const u
                     << (8u8).wrapping_sub(j as u8 & 7)) as modp_t
         }
         v[i as usize] = (t as i32 & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t;
-        j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize as usize;
+        j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
         i = i.wrapping_add(1)
     }
     ringmul_p(X_prime.as_mut_ptr(), U_T.as_mut_ptr(), S_idx.as_mut_ptr());
@@ -656,7 +656,7 @@ pub unsafe fn crypto_encrypt(
         m_len,
     ) != 0)
     {
-        *ct_len = (*ct_len as u64).wrapping_add(c2_len as u64) as usize as usize;
+        *ct_len = (*ct_len as u64).wrapping_add(c2_len as u64) as usize;
         /* All OK */
         result = 0i32
     } // r5_cpa_pke_decrypt m'
