@@ -87,7 +87,6 @@ const SHAKE256_RATE: usize = 136;
 pub const SECRETKEYBYTES: usize = (PARAMS_KAPPA_BYTES + PARAMS_KAPPA_BYTES + PARAMS_PK_SIZE);
 pub const PUBLICKEYBYTES: usize = (PARAMS_PK_SIZE);
 pub const CTEXT_BYTES: usize = (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + DEM_TAG_LEN);
-// Size of the vector to pass to probe_cm
 
 // Cache-resistant "occupancy probe". Tests and "occupies" a single slot at x.
 // Return value zero (false) indicates the slot was originally empty.
@@ -111,7 +110,7 @@ fn probe_cm(v: &mut [u64], x: u16) -> bool {
 
 // create a sparse ternary vector from a seed
 unsafe fn create_secret_vector(mut idx: *mut [u16; 2], mut seed: *const u8) {
-    let mut v: [u64; 19] = [0; 19];
+    let mut v: [u64; PROBEVEC64] = [0; PROBEVEC64];
 
     let mut shake =
         crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, PARAMS_KAPPA_BYTES))
@@ -305,15 +304,11 @@ unsafe fn pack_q_p(mut pv: *mut u8, mut vq: *const modq_t, rounding_constant: mo
 }
 // unpack a byte string into ND elements of p bits
 fn unpack_p(vp: &mut [modp_t], pv: &[u8]) {
-    let mut j: usize = 0;
     for i in 0..PARAMS_ND {
+        let j = PARAMS_P_BITS * i;
         let mut t = (pv[j >> 3] >> (j % 8)) as modp_t;
-
-        if ((j % 8) + PARAMS_P_BITS) > 8 {
-            t |= (pv[(j >> 3) + 1] as u16) << (8 - (j % 8));
-        }
+        t |= (pv[(j >> 3) + 1] as u16) << (8 - (j % 8));
         vp[i] = t & ((PARAMS_P - 1) as modp_t);
-        j += PARAMS_P_BITS;
     }
 }
 // generate a keypair (sigma, B)
