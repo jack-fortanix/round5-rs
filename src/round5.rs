@@ -271,19 +271,21 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     }
 }
 fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
-    let mut i: usize = 0;
-    let mut j: usize = 0;
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
-    let mut U_T: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
-    let mut v: [modp_t; 256] = [0; 256];
-    let mut t: modp_t = 0;
-    let mut m1 = vec![0u8; PARAMS_KAPPA_BYTES];
     create_secret_vector(&mut S_idx, &sk[0..PARAMS_KAPPA_BYTES]);
+
+    let mut U_T: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
     unpack_p(&mut U_T, ct);
+
+
+    let mut m1 = vec![0u8; PARAMS_KAPPA_BYTES];
     unsafe {
-        j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
+    let mut v: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
+    let mut t: modp_t = 0;
+    let mut i: usize = 0;
         i = 0i32 as usize;
         while i < PARAMS_MU {
+            let j = 8*PARAMS_NDP_SIZE + PARAMS_T_BITS*i;
             t = (*ct.as_ptr().offset((j >> 3i32) as isize) as i32 >> (j & 7)) as modp_t;
             if (j & 7).wrapping_add(PARAMS_T_BITS) > 8 {
                 t = (t as i32
@@ -291,7 +293,6 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
                         << (8u8).wrapping_sub(j as u8 & 7)) as modp_t
             }
             v[i as usize] = (t as i32 & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t;
-            j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
             i = i.wrapping_add(1)
         }
         let mut X_prime: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
