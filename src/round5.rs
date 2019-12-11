@@ -76,18 +76,11 @@ const PARAMS_B_BITS: usize = 1;
 const PARAMS_H2: usize = 8;
 const PARAMS_MU: usize = 256;
 const PARAMS_MUT_SIZE: usize = 160;
-const PARAMS_MUB_SIZE: usize = 32;
 const PARAMS_H3: usize = 128;
 
 const DEM_TAG_LEN: usize = 16;
 
 const SHAKE256_RATE: usize = 136;
-
-unsafe fn shake256(out: *mut u8, len: usize, seed: *const u8, seed_len: usize) {
-    let mut shake =
-        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len)).unwrap();
-    shake.expand(std::slice::from_raw_parts_mut(out, len));
-}
 
 // CCA_PKE Variant
 
@@ -273,13 +266,19 @@ unsafe fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t, mut idx: *mut [u16; 
     // Copy result
     copy_u16(d, tmp_d.as_mut_ptr(), PARAMS_MU as usize);
 }
+
+unsafe fn shake256(out: *mut u8, len: usize, seed: *const u8, seed_len: usize) {
+    let mut shake =
+        crate::sha3::ShakeXof::new(256, std::slice::from_raw_parts(seed, seed_len)).unwrap();
+    shake.expand(std::slice::from_raw_parts_mut(out, len));
+}
+
 // Creates A random for the given seed and algorithm parameters.
-unsafe fn create_A_random(mut A_random: *mut modq_t, mut seed: *const u8) {
+unsafe fn create_A_random(A_random: &mut [modq_t], seed: &[u8]) {
     shake256(
-        A_random as *mut u8,
-        ((PARAMS_D as i32 * PARAMS_K as i32) as libc::c_ulong)
-            .wrapping_mul(::std::mem::size_of::<u16>() as libc::c_ulong) as usize,
-        seed,
+        A_random.as_mut_ptr() as *mut u8,
+        PARAMS_D * PARAMS_K * 2,
+        seed.as_ptr(),
         PARAMS_KAPPA_BYTES,
     );
 }
@@ -332,7 +331,7 @@ unsafe fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
     pk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[0..PARAMS_KAPPA_BYTES]);
     // A from sigma
-    create_A_random(A.as_mut_ptr(), pk.as_ptr()); // secret key -- Random S
+    create_A_random(&mut A, pk); // secret key -- Random S
 
     sk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES]);
     create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
@@ -353,18 +352,12 @@ unsafe fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     let mut U_T: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut B: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut X: [modp_t; 256] = [0; 256];
-    let mut m1: [u8; 32] = [0; 32];
     let mut t: modp_t = 0;
     let mut tm: modp_t = 0;
     // unpack public key
     unpack_p(B.as_mut_ptr(), pk.as_ptr().offset(PARAMS_KAPPA_BYTES as isize));
     // A from sigma
-    create_A_random(A.as_mut_ptr(), pk.as_ptr()); // add error correction code
-    copy_u8(m1.as_mut_ptr(), m.as_ptr(), PARAMS_KAPPA_BYTES);
-    zero_u8(
-        m1.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize),
-        (PARAMS_MUB_SIZE as i32 - PARAMS_KAPPA_BYTES as i32) as usize,
-    );
+    create_A_random(&mut A, &pk); // add error correction code
     // Create R
     create_secret_vector(R_idx.as_mut_ptr(), rho.as_ptr()); // U^T == U = A^T * R == A * R (mod q)
     ringmul_q(U_T.as_mut_ptr(), A.as_mut_ptr(), R_idx.as_mut_ptr()); // X = B^T * R == B * R (mod p)
@@ -382,7 +375,7 @@ unsafe fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
         t = (X[i as usize] as i32 + PARAMS_H2 as i32 >> PARAMS_P_BITS as i32 - PARAMS_T_BITS as i32)
             as modp_t;
         // add message
-        tm = (m1[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
+        tm = (m[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
             >> (i.wrapping_mul(PARAMS_B_BITS) & 7)) as modp_t; // pack t bits
         t = ((t as i32
             + ((tm as i32 & (1i32 << PARAMS_B_BITS as i32) - 1i32)
