@@ -11,37 +11,6 @@
 use mbedtls::cipher::*;
 
 extern "C" {
-    /* *
-     * Constant time memory comparison function. Use to replace `memcmp()` when
-     * comparing security critical data.
-     *
-     * @param s1 the byte string to compare to
-     * @param s2 the byte string to compare
-     * @param n the number of bytes to compare
-     * @return 0 if all size bytes are equal, non-zero otherwise
-     */
-    #[no_mangle]
-    fn constant_time_memcmp(
-        s1: *const libc::c_void,
-        s2: *const libc::c_void,
-        n: usize,
-    ) -> libc::c_int;
-    /* *
-     * Conditionally copies the data from the source to the destination in
-     * constant time.
-     *
-     * @param dst the destination of the copy
-     * @param src the source of the copy
-     * @param n the number of bytes to copy
-     * @param flag indicating whether or not the copy should be performed
-     */
-    #[no_mangle]
-    fn conditional_constant_time_memcpy(
-        dst: *mut libc::c_void,
-        src: *const libc::c_void,
-        n: usize,
-        flag: u8,
-    );
     #[no_mangle]
     fn copy_u8(out: *mut u8, in_0: *const u8, len: usize);
     #[no_mangle]
@@ -50,7 +19,37 @@ extern "C" {
     fn zero_u8(out: *mut u8, len: usize);
     #[no_mangle]
     fn zero_u16(out: *mut u16, len: usize);
+}
 
+// Return 0xffu8 if a == b or 0x00u8 otherwise
+fn constant_time_memcmp(a: &[u8], b: &[u8]) -> u8 {
+    if a.len() != b.len() {
+        return 0u8;
+    }
+
+    let mut z = 0u8;
+    for i in 0..a.len() {
+        z |= (a[i] ^ b[i]);
+    }
+
+    // now fold down to 0/1 bit
+    z = (z >> 4) | (z & 0x0F); // fold top/bottom 4 bits of 8
+    z = (z >> 2) | (z & 0x03); // fold top/bottom 2 bits of 4
+    z = (z >> 1) | (z & 0x01); // fold top/bottom 1 bit of 2
+    // map 1 -> 0xff, 0 -> 0
+    z = 0 - z;
+    return z;
+}
+
+// if mask == 0x00 do nothing, if mask = 0xFF copy in to out
+// all other values of mask do bad things
+fn conditional_constant_time_memcpy(output: &mut [u8], input: &[u8], mask: u8) {
+    //assert!(mask == 0x00 || mask == 0xFF);
+    assert_eq!(output.len(), input.len());
+
+    for i in 0..output.len() {
+        output[i] = (output[i] & !mask) | (input[i] & mask);
+    }
 }
 
 // appropriate types
@@ -562,11 +561,12 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
     return ct;
 }
 
-unsafe fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
+fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
     let mut m_prime: [u8; PARAMS_KAPPA_BYTES] = [0; PARAMS_KAPPA_BYTES];
-    let mut L_g_rho_prime: [u8; PARAMS_KAPPA_BYTES*3] = [0u8; PARAMS_KAPPA_BYTES*3];
     let mut ct_prime: [u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES] = [0; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES];
-    r5_cpa_pke_decrypt(m_prime.as_mut_ptr(), sk.as_ptr(), ct.as_ptr());
+    unsafe {
+        r5_cpa_pke_decrypt(m_prime.as_mut_ptr(), sk.as_ptr(), ct.as_ptr());
+    }
 
     let mut shake = crate::sha3::Shake::new(256).unwrap();
     shake.update(&m_prime[0..PARAMS_KAPPA_BYTES]);
@@ -574,31 +574,27 @@ unsafe fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
     let L_g_rho_prime = shake.finalize(3*PARAMS_KAPPA_BYTES);
 
     // Encrypt m: ct' = (U',v')
-    r5_cpa_pke_encrypt(
-        ct_prime.as_mut_ptr(),
-        sk.as_ptr().offset(2 * PARAMS_KAPPA_BYTES as isize),
-        m_prime.as_mut_ptr(),
-        L_g_rho_prime[2*PARAMS_KAPPA_BYTES..].as_ptr(),
-    );
+    unsafe {
+        r5_cpa_pke_encrypt(
+            ct_prime.as_mut_ptr(),
+            sk.as_ptr().offset(2 * PARAMS_KAPPA_BYTES as isize),
+            m_prime.as_mut_ptr(),
+            L_g_rho_prime[2*PARAMS_KAPPA_BYTES..].as_ptr(),
+        );
+    }
+
     // ct' = (U',v',g')
     ct_prime[PARAMS_CT_SIZE..].copy_from_slice(&L_g_rho_prime[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES]);
     // k = H(L', ct')
 
+    // verification ok ?
+    let fail = constant_time_memcmp(&ct, &ct_prime);
+    // k = H(y, ct') depending on fail state
+
     let mut hash_in: [u8; PARAMS_KAPPA_BYTES] = [0; PARAMS_KAPPA_BYTES];
     hash_in.copy_from_slice(&L_g_rho_prime[0..PARAMS_KAPPA_BYTES]);
-    // verification ok ?
-    let fail: u8 = constant_time_memcmp(
-        ct.as_ptr() as *const libc::c_void,
-        ct_prime.as_mut_ptr() as *const libc::c_void,
-        (PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize,
-    ) as u8;
-    // k = H(y, ct') depending on fail state
-    conditional_constant_time_memcpy(
-        hash_in.as_mut_ptr() as *mut libc::c_void,
-        sk.as_ptr().offset(PARAMS_KAPPA_BYTES as isize) as *const libc::c_void,
-        PARAMS_KAPPA_BYTES,
-        fail,
-    );
+    conditional_constant_time_memcpy(&mut hash_in, &sk[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES], fail);
+
     shake.update(&hash_in);
     shake.update(&ct_prime);
     return shake.finalize(PARAMS_KAPPA_BYTES);
@@ -612,7 +608,7 @@ pub fn decrypt(ctext: &[u8], sk: &[u8]) -> Vec<u8> {
     }
 
     /* Determine k */
-    let k = unsafe { r5_cca_kem_decapsulate(&ctext[0..c1_len], sk) };
+    let k = r5_cca_kem_decapsulate(&ctext[0..c1_len], sk);
 
     /* Apply DEM-inverse to get m */
     round5_dem_inverse(&ctext[c1_len..], &k)
