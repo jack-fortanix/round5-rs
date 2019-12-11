@@ -80,6 +80,8 @@ const PARAMS_MUT_SIZE: usize = 160;
 const PARAMS_MUB_SIZE: usize = 32;
 const PARAMS_H3: usize = 128;
 
+const DEM_TAG_LEN: usize = 16;
+
 const SHAKE256_RATE: usize = 136;
 
 unsafe fn shake256(out: *mut u8, len: usize, seed: *const u8, seed_len: usize) {
@@ -93,7 +95,7 @@ unsafe fn shake256(out: *mut u8, len: usize, seed: *const u8, seed_len: usize) {
 
 pub const SECRETKEYBYTES: usize = (PARAMS_KAPPA_BYTES + PARAMS_KAPPA_BYTES + PARAMS_PK_SIZE);
 pub const PUBLICKEYBYTES: usize = (PARAMS_PK_SIZE);
-pub const CTEXT_BYTES: usize = (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + 16);
+pub const CTEXT_BYTES: usize = (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + DEM_TAG_LEN);
 // Size of the vector to pass to probe_cm
 
 // Cache-resistant "occupancy probe". Tests and "occupies" a single slot at x.
@@ -471,30 +473,18 @@ fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) {
 
     let ad = vec![];
 
-    let mut tag = vec![0; 16];
+    let mut tag = vec![0; DEM_TAG_LEN];
 
     cipher.encrypt_auth(&ad, &msg, &mut out, &mut tag).unwrap();
 
     out[msg.len()..].copy_from_slice(&tag);
 }
 
-unsafe fn round5_dem_inverse(
-    mut m: *mut u8,
-    mut m_len: *mut usize,
-    mut key: *const u8,
-    mut c2: *const u8,
-    c2_len: usize,
-) -> i32 {
-    use mbedtls::cipher::*;
-
-    let raw_key = std::slice::from_raw_parts(key, 32);
-
-    let mut shake = crate::sha3::ShakeXof::new(256, &raw_key).unwrap();
+fn round5_dem_inverse(ctext: &[u8], key: &[u8]) -> Vec<u8> {
+    let mut shake = crate::sha3::ShakeXof::new(256, &key).unwrap();
 
     let mut key_and_iv = vec![0; 32 + 12];
     shake.expand(&mut key_and_iv);
-
-    let ctext = std::slice::from_raw_parts(c2, c2_len as usize);
 
     let cipher =
         Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256).unwrap();
@@ -504,22 +494,18 @@ unsafe fn round5_dem_inverse(
 
     let ad = vec![];
 
-    let mut ptext = vec![0; ctext.len() - 16];
+    let mut ptext = vec![0; ctext.len() - DEM_TAG_LEN];
 
     cipher
         .decrypt_auth(
             &ad,
-            &ctext[0..ctext.len() - 16],
+            &ctext[0..ctext.len() - DEM_TAG_LEN],
             &mut ptext,
-            &ctext[ctext.len() - 16..],
+            &ctext[ctext.len() - DEM_TAG_LEN..],
         )
         .unwrap();
 
-    copy_u8(m, ptext.as_ptr(), ptext.len());
-
-    *m_len = ptext.len();
-
-    return 0i32;
+    ptext
 }
 
 pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
@@ -609,7 +595,7 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
         return Vec::new();
     }
 
-    let mut ct = vec![0u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + msg.len() + 16];
+    let mut ct = vec![0u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + msg.len() + DEM_TAG_LEN];
 
     let c1_len = PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES;
 
@@ -697,32 +683,19 @@ unsafe fn r5_cca_kem_decapsulate(mut k: *mut u8, mut ct: *const u8, mut sk: *con
     return 0i32;
 }
 
-pub unsafe fn crypto_encrypt_open(
-    mut m: *mut u8,
-    mut m_len: *mut usize,
-    mut ct: *const u8,
-    ct_len: usize,
-    mut sk: *const u8,
-) -> i32 {
-    let mut k: [u8; 32] = [0; 32];
-    let c1_len: usize = (PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize;
-    let c2_len: usize = ct_len.wrapping_sub(c1_len);
-    /* Check length, should be at least c1_len + 16 (for the DEM tag) */
-    if ct_len < c1_len.wrapping_add(16u32 as usize) {
-        return -1i32;
+pub fn decrypt(ctext: &[u8], sk: &[u8]) -> Vec<u8> {
+    let c1_len = PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES;
+
+    if ctext.len() < c1_len + DEM_TAG_LEN {
+        return vec![]; // error
     }
+
     /* Determine k */
-    r5_cca_kem_decapsulate(k.as_mut_ptr(), &*ct.offset(0), sk);
-    /* Apply DEM-inverse to get m */
-    if round5_dem_inverse(
-        m,
-        m_len,
-        k.as_mut_ptr(),
-        &*ct.offset(c1_len as isize),
-        c2_len,
-    ) != 0
-    {
-        return -1i32;
+    let mut k: [u8; 32] = [0; 32];
+    unsafe {
+        r5_cca_kem_decapsulate(k.as_mut_ptr(), ctext.as_ptr(), sk.as_ptr());
     }
-    return 0i32;
+    /* Apply DEM-inverse to get m */
+
+    round5_dem_inverse(&ctext[c1_len..], &k)
 }
