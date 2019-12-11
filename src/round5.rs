@@ -14,8 +14,6 @@ extern "C" {
     fn copy_u8(out: *mut u8, in_0: *const u8, len: usize);
     #[no_mangle]
     fn copy_u16(out: *mut u16, in_0: *const u16, len: usize);
-    #[no_mangle]
-    fn zero_u16(out: *mut u16, len: usize);
 }
 
 // Return 0xffu8 if a == b or 0x00u8 otherwise

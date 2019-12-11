@@ -23,11 +23,3 @@ pub unsafe extern "C" fn copy_u16(mut out: *mut u16,
         i = i.wrapping_add(1)
     };
 }
-#[no_mangle]
-pub unsafe extern "C" fn zero_u16(mut out: *mut u16, mut len: usize) {
-    let mut i: usize = 0i32 as usize;
-    while i != len {
-        *out.offset(i as isize) = 0i32 as u16;
-        i = i.wrapping_add(1)
-    };
-}
