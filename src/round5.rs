@@ -227,7 +227,7 @@ unsafe fn ringmul_p(mut d: *mut modp_t, mut a: *mut modp_t, mut idx: *mut [u16; 
     }
     p[1] = *a.offset((PARAMS_ND as i32 - 1i32) as isize);
     // Initialize result
-    let mut tmp_d: [modp_t; 1170] = [0u16; 1170];
+    let mut tmp_d: [modp_t; PARAMS_ND] = [0u16; PARAMS_ND];
 
     i = 0i32 as usize;
     while i < (PARAMS_H / 2) {
@@ -327,8 +327,8 @@ unsafe fn unpack_p(mut vp: *mut modp_t, mut pv: *const u8) {
 }
 // generate a keypair (sigma, B)
 unsafe fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
-    let mut A: [modq_t; 1170] = [0; 1170]; // sigma = seed of A
-    let mut B: [modq_t; 1170] = [0; 1170];
+    let mut A: [modq_t; PARAMS_ND] = [0; PARAMS_ND]; // sigma = seed of A
+    let mut B: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
     pk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[0..PARAMS_KAPPA_BYTES]);
     // A from sigma
@@ -353,10 +353,10 @@ unsafe fn r5_cpa_pke_encrypt(
 ) -> i32 {
     let mut i: usize = 0;
     let mut j: usize = 0;
-    let mut A: [modq_t; 1170] = [0; 1170];
+    let mut A: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut R_idx: [[u16; 2]; 111] = [[0; 2]; 111];
-    let mut U_T: [modq_t; 1170] = [0; 1170];
-    let mut B: [modp_t; 1170] = [0; 1170];
+    let mut U_T: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
+    let mut B: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut X: [modp_t; 256] = [0; 256];
     let mut m1: [u8; 32] = [0; 32];
     let mut t: modp_t = 0;
@@ -409,10 +409,9 @@ unsafe fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
-    let mut U_T: [modp_t; 1170] = [0; 1170];
+    let mut U_T: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut v: [modp_t; 256] = [0; 256];
     let mut t: modp_t = 0;
-    let mut X_prime: [modp_t; 256] = [0; 256];
     let mut m1 = vec![0u8; PARAMS_KAPPA_BYTES];
     create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
     unpack_p(U_T.as_mut_ptr(), ct.as_ptr());
@@ -429,6 +428,7 @@ unsafe fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
         j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
         i = i.wrapping_add(1)
     }
+    let mut X_prime: [modp_t; 256] = [0; 256];
     ringmul_p(X_prime.as_mut_ptr(), U_T.as_mut_ptr(), S_idx.as_mut_ptr());
     // X' = v - X', compressed to 1 bit
     let mut x_p: modp_t = 0;
