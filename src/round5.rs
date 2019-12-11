@@ -9,11 +9,6 @@
 
 use mbedtls::cipher::*;
 
-extern "C" {
-    #[no_mangle]
-    fn copy_u16(out: *mut u16, in_0: *const u16, len: usize);
-}
-
 // Return 0xffu8 if a == b or 0x00u8 otherwise
 fn constant_time_memcmp(a: &[u8], b: &[u8]) -> u8 {
     if a.len() != b.len() {
@@ -181,67 +176,10 @@ fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
     }
 }
 // multiplication mod p, result length mu
-unsafe fn ringmul_p(d: &mut [modp_t], a: &[modp_t], idx: &[[u16; 2]; 111]) {
-    let mut i: usize = 0;
-    let mut j: usize = 0;
-    let mut k: usize = 0;
-    let mut p: [modp_t; 1171] = [0; 1171];
-    // Note: order of coefficients a[1..n] is reversed!
-    // Without error correction we "lift" -- i.e. multiply by (x - 1)
-    p[0] = -(*a.as_ptr().offset(0) as i32) as modp_t;
-    i = 1i32 as usize;
-    while i < PARAMS_ND {
-        p[((PARAMS_ND as i32 + 1i32) as u64).wrapping_sub(i as u64) as usize] =
-            (*a.as_ptr().offset(i.wrapping_sub(1) as isize) as i32 - *a.as_ptr().offset(i as isize) as i32) as modp_t;
-        i = i.wrapping_add(1)
-    }
-    p[1] = *a.as_ptr().offset((PARAMS_ND as i32 - 1i32) as isize);
-    // Initialize result
-    let mut tmp_d: [modp_t; PARAMS_ND] = [0u16; PARAMS_ND];
-
-    i = 0i32 as usize;
-    while i < (PARAMS_H / 2) {
-        // Modified to always scan the same ranges
-        k = (*idx.as_ptr().offset(i as isize))[0] as usize; // positive coefficients
-        tmp_d[0] = (tmp_d[0] as i32 + p[k as usize] as i32) as modp_t; // negative coefficients
-        j = 1i32 as usize;
-        while k > 0 {
-            k = k.wrapping_sub(1);
-            tmp_d[j as usize] = (tmp_d[j as usize] as i32 + p[k as usize] as i32) as modp_t;
-            j = j.wrapping_add(1)
-        }
-        k = (PARAMS_ND as i32 + 1i32) as usize;
-        while j < PARAMS_ND {
-            k = k.wrapping_sub(1);
-            tmp_d[j as usize] = (tmp_d[j as usize] as i32 + p[k as usize] as i32) as modp_t;
-            j = j.wrapping_add(1)
-        }
-        k = (*idx.as_ptr().offset(i as isize))[1] as usize;
-        tmp_d[0] = (tmp_d[0] as i32 - p[k as usize] as i32) as modp_t;
-        j = 1i32 as usize;
-        while k > 0 {
-            k = k.wrapping_sub(1);
-            tmp_d[j as usize] = (tmp_d[j as usize] as i32 - p[k as usize] as i32) as modp_t;
-            j = j.wrapping_add(1)
-        }
-        k = (PARAMS_ND as i32 + 1i32) as usize;
-        while j < PARAMS_ND {
-            k = k.wrapping_sub(1);
-            tmp_d[j as usize] = (tmp_d[j as usize] as i32 - p[k as usize] as i32) as modp_t;
-            j = j.wrapping_add(1)
-        }
-        i = i.wrapping_add(1)
-    }
-    // Without error correction we "lifted" so we now need to "unlift"
-    tmp_d[0] = -(tmp_d[0] as i32) as modp_t;
-    i = 1i32 as usize;
-    while i < PARAMS_MU {
-        tmp_d[i as usize] =
-            (tmp_d[i.wrapping_sub(1) as usize] as i32 - tmp_d[i as usize] as i32) as modp_t;
-        i = i.wrapping_add(1)
-    }
-    // Copy result
-    copy_u16(d.as_mut_ptr(), tmp_d.as_mut_ptr(), PARAMS_MU as usize);
+fn ringmul_p(d_out: &mut [modp_t], a: &[modp_t], idx: &[[u16; 2]; 111]) {
+    let mut d: [modp_t; PARAMS_ND] = [0u16; PARAMS_ND];
+    ringmul_q(&mut d, a, idx);
+    d_out.copy_from_slice(&d[0..PARAMS_MU]);
 }
 
 // Creates A random for the given seed and algorithm parameters.
@@ -307,7 +245,7 @@ unsafe fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8])
     let mut R_idx: [[u16; 2]; 111] = [[0; 2]; 111];
     let mut U_T: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut B: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
-    let mut X: [modp_t; 256] = [0; 256];
+    let mut X: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
     let mut t: modp_t = 0;
     let mut tm: modp_t = 0;
     // unpack public key
