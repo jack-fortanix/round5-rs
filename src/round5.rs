@@ -261,15 +261,16 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
         // compress p->t
         let mut t = X[i].wrapping_add(PARAMS_H2) >> (PARAMS_P_BITS - PARAMS_T_BITS);
         // add message
+
         let tm = (m[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
-            >> (i.wrapping_mul(PARAMS_B_BITS) & 7)) as modp_t; // pack t bits
+                  >> (i.wrapping_mul(PARAMS_B_BITS) & 7)) as modp_t; // pack t bits
         t = ((t as i32
-            + ((tm as i32 & (1i32 << PARAMS_B_BITS as i32) - 1i32)
-                << PARAMS_T_BITS as i32 - PARAMS_B_BITS as i32)) as modp_t as i32
-            & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t; // ct = U^T | v
-        ct[(j >> 3)] = (ct[(j >> 3)] as i32 | (t as i32) << (j & 7)) as u8; // unpack t bits
-        ct[(j >> 3) + 1] =
-            (ct[(j >> 3) + 1] as i32 | t as i32 >> (8u8).wrapping_sub(j as u8 & 7)) as u8
+              + ((tm as i32 & (1i32 << PARAMS_B_BITS as i32) - 1i32)
+                 << PARAMS_T_BITS as i32 - PARAMS_B_BITS as i32)) as modp_t as i32
+             & (1i32 << PARAMS_T_BITS as i32) - 1i32) as modp_t; // ct = U^T | v
+
+        ct[(j >> 3)] |= (t << (j & 7)) as u8; // unpack t bits
+        ct[(j >> 3) + 1] |= (t >> (8 - (j % 8))) as u8;
     }
 }
 fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
