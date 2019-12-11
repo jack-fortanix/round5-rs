@@ -137,20 +137,20 @@ fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
 }
 // multiplication mod q, result length n
 unsafe fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
-    let mut i: usize = 0;
     let mut j: usize = 0;
     let mut k: usize = 0;
     let mut p: [modq_t; 1171] = [0; 1171];
     // Note: order of coefficients a[1..n] is reversed!
     // "lift" -- multiply by (x - 1)
-    p[0] = -(*a.as_ptr().offset(0) as i32) as modq_t;
-    i = 1;
-    while i < PARAMS_ND {
+    p[0] = (-(a[0] as i16)) as modq_t;
+    for i in 1..PARAMS_ND {
         p[((PARAMS_ND as i32 + 1i32) as u64).wrapping_sub(i as u64) as usize] =
             (*a.as_ptr().offset(i.wrapping_sub(1) as isize) as i32 - *a.as_ptr().offset(i as isize) as i32) as modq_t;
-        i = i.wrapping_add(1)
     }
     p[1] = *a.as_ptr().offset((PARAMS_ND as i32 - 1i32) as isize);
+
+    let mut i: usize = 0;
+
     // Initialize result
     zero_u16(d.as_mut_ptr(), PARAMS_ND);
     i = 0i32 as usize;
