@@ -108,6 +108,7 @@ fn probe_cm(v: &mut [u64], x: u16) -> bool {
     return (c == 0);
     // return true if was occupied before
 }
+
 // create a sparse ternary vector from a seed
 unsafe fn create_secret_vector(mut idx: *mut [u16; 2], mut seed: *const u8) {
     let mut v: [u64; 19] = [0; 19];
@@ -303,22 +304,16 @@ unsafe fn pack_q_p(mut pv: *mut u8, mut vq: *const modq_t, rounding_constant: mo
     }
 }
 // unpack a byte string into ND elements of p bits
-unsafe fn unpack_p(mut vp: *mut modp_t, mut pv: *const u8) {
-    let mut i: usize = 0; // unpack p bits
+fn unpack_p(vp: &mut [modp_t], pv: &[u8]) {
     let mut j: usize = 0;
-    let mut t: modp_t = 0;
-    j = 0i32 as usize;
-    i = 0i32 as usize;
-    while i < PARAMS_ND {
-        t = (*pv.offset((j >> 3i32) as isize) as i32 >> (j & 7)) as modp_t;
-        if (j & 7).wrapping_add(PARAMS_P_BITS) > 8 {
-            t = (t as i32
-                | (*pv.offset((j >> 3).wrapping_add(1) as isize) as modp_t as i32)
-                    << (8u8).wrapping_sub(j as u8 & 7)) as modp_t
+    for i in 0..PARAMS_ND {
+        let mut t = (pv[j >> 3] >> (j % 8)) as modp_t;
+
+        if ((j % 8) + PARAMS_P_BITS) > 8 {
+            t |= (pv[(j >> 3) + 1] as u16) << (8 - (j % 8));
         }
-        *vp.offset(i as isize) = (t as i32 & PARAMS_P as i32 - 1i32) as modp_t;
-        j = (j as u64).wrapping_add(PARAMS_P_BITS as i32 as u64) as usize;
-        i = i.wrapping_add(1)
+        vp[i] = t & ((PARAMS_P - 1) as modp_t);
+        j += PARAMS_P_BITS;
     }
 }
 // generate a keypair (sigma, B)
@@ -352,7 +347,7 @@ unsafe fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     let mut t: modp_t = 0;
     let mut tm: modp_t = 0;
     // unpack public key
-    unpack_p(B.as_mut_ptr(), pk.as_ptr().offset(PARAMS_KAPPA_BYTES as isize));
+    unpack_p(&mut B, &pk[PARAMS_KAPPA_BYTES..]);
     // A from sigma
     create_A_random(&mut A, &pk); // add error correction code
     // Create R
@@ -398,7 +393,7 @@ unsafe fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     let mut t: modp_t = 0;
     let mut m1 = vec![0u8; PARAMS_KAPPA_BYTES];
     create_secret_vector(S_idx.as_mut_ptr(), sk.as_ptr());
-    unpack_p(U_T.as_mut_ptr(), ct.as_ptr());
+    unpack_p(&mut U_T, ct);
     j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
     i = 0i32 as usize;
     while i < PARAMS_MU {
@@ -525,8 +520,6 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
     let mut ct = vec![0u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + msg.len() + DEM_TAG_LEN];
 
     let c1_len = PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES;
-
-    let mut k: [u8; 32] = [0; 32];
 
     let k = r5_cca_kem_encapsulate(&mut ct[0..c1_len], pk, coins);
 
