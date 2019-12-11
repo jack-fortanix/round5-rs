@@ -56,7 +56,7 @@ type modq_t = u16;
 type modp_t = u16;
 const PARAMS_PK_SIZE: usize = 1349;
 const PARAMS_KAPPA_BYTES: usize = 32;
-const PARAMS_H1: usize = 8;
+const PARAMS_H1: u16 = 8;
 const PARAMS_P_BITS: usize = 9;
 const PARAMS_P: usize = 512;
 const PARAMS_Q_BITS: usize = 13;
@@ -70,7 +70,7 @@ const PARAMS_RS_LIM: u16 = 65520;
 const PARAMS_CT_SIZE: usize = 1477;
 const PARAMS_T_BITS: usize = 5;
 const PARAMS_B_BITS: usize = 1;
-const PARAMS_H2: usize = 8;
+const PARAMS_H2: u16 = 8;
 const PARAMS_MU: usize = 256;
 const PARAMS_MUT_SIZE: usize = 160;
 const PARAMS_H3: usize = 128;
@@ -263,26 +263,15 @@ fn create_A_random(A_random: &mut [modq_t], seed: &[u8]) {
 }
 
 // compress ND elements of q bits into p bits and pack into a byte string
-unsafe fn pack_q_p(mut pv: *mut u8, mut vq: *const modq_t, rounding_constant: modq_t) {
-    let mut i: usize = 0; // pack p bits
-    let mut j: usize = 0;
-    let mut t: modp_t = 0;
-    zero_u8(pv, PARAMS_NDP_SIZE as usize);
-    j = 0i32 as usize;
-    i = 0i32 as usize;
-    while i < PARAMS_ND {
-        t = (*vq.offset(i as isize) as i32 + rounding_constant as i32
-            >> PARAMS_Q_BITS as i32 - PARAMS_P_BITS as i32
-            & PARAMS_P as i32 - 1i32) as modp_t;
-        *pv.offset((j >> 3i32) as isize) =
-            (*pv.offset((j >> 3i32) as isize) as i32 | (t as i32) << (j & 7)) as u8;
-        if (j & 7).wrapping_add(PARAMS_P_BITS) > 8 {
-            *pv.offset((j >> 3).wrapping_add(1) as isize) =
-                (*pv.offset((j >> 3).wrapping_add(1) as isize) as i32
-                    | t as i32 >> (8u8).wrapping_sub(j as u8 & 7)) as u8
-        }
-        j = (j as u64).wrapping_add(PARAMS_P_BITS as i32 as u64) as usize;
-        i = i.wrapping_add(1)
+fn pack_q_p(pv: &mut [u8], vq: &[modq_t], rounding_constant: modq_t) {
+    pv.copy_from_slice(&[0; PARAMS_NDP_SIZE]);
+
+    for i in 0..PARAMS_ND {
+        let j = i * PARAMS_P_BITS;
+        let t = (vq[i].wrapping_add(rounding_constant) >> (PARAMS_Q_BITS - PARAMS_P_BITS)) & (PARAMS_P - 1) as u16;
+
+        pv[j >> 3] = pv[j >> 3] | ((t << (j % 8)) as u8);
+        pv[(j >> 3) + 1] = pv[(j >> 3) + 1] | ((t >> (8 - (j % 8))) as u8);
     }
 }
 // unpack a byte string into ND elements of p bits
@@ -308,17 +297,11 @@ fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
 
     ringmul_q(&mut B, &A, &S_idx);
 
-    unsafe {
-        // Compress B q_bits -> p_bits, pk = sigma | B
-        pack_q_p(
-            pk.as_mut_ptr().offset(PARAMS_KAPPA_BYTES as isize),
-            B.as_mut_ptr(),
-            PARAMS_H1 as i32 as modq_t,
-        );
-    }
+    // Compress B q_bits -> p_bits, pk = sigma | B
+    pack_q_p(&mut pk[PARAMS_KAPPA_BYTES..PARAMS_NDP_SIZE+PARAMS_KAPPA_BYTES], &B, PARAMS_H1);
 }
 
-unsafe fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
+unsafe fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     let mut i: usize = 0;
     let mut j: usize = 0;
     let mut A: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
@@ -336,7 +319,7 @@ unsafe fn r5_cpa_pke_encrypt(ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     create_secret_vector(&mut R_idx, &rho); // U^T == U = A^T * R == A * R (mod q)
     ringmul_q(&mut U_T, &A, &R_idx); // X = B^T * R == B * R (mod p)
     ringmul_p(X.as_mut_ptr(), B.as_mut_ptr(), R_idx.as_mut_ptr()); // ct = U^T | v
-    pack_q_p(ct.as_mut_ptr(), U_T.as_mut_ptr(), PARAMS_H2 as i32 as modq_t);
+    pack_q_p(&mut ct[0..PARAMS_NDP_SIZE], &U_T, PARAMS_H2);
     zero_u8(
         ct.as_mut_ptr().offset(PARAMS_NDP_SIZE as isize),
         PARAMS_MUT_SIZE as usize,
