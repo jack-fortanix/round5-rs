@@ -41,8 +41,6 @@ fn conditional_constant_time_memcpy(output: &mut [u8], input: &[u8], mask: u8) {
 }
 
 // appropriate types
-type modq_t = u16;
-type modp_t = u16;
 const PARAMS_PK_SIZE: usize = 1349;
 const PARAMS_KAPPA_BYTES: usize = 32;
 const PARAMS_H1: u16 = 8;
@@ -125,11 +123,11 @@ fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
     }
 }
 // multiplication mod q, result length n
-fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
-    let mut p: [modq_t; 1171] = [0; 1171];
+fn ringmul_q(d: &mut [u16], a: &[u16], idx: &[[u16; 2]; 111]) {
+    let mut p: [u16; 1171] = [0; 1171];
     // Note: order of coefficients a[1..n] is reversed!
     // "lift" -- multiply by (x - 1)
-    p[0] = (-(a[0] as i16)) as modq_t;
+    p[0] = (-(a[0] as i16)) as u16;
     for i in 1..PARAMS_ND {
         p[PARAMS_ND + 1 - i] = a[i - 1].wrapping_sub(a[i]);
     }
@@ -176,14 +174,14 @@ fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
     }
 }
 // multiplication mod p, result length mu
-fn ringmul_p(d_out: &mut [modp_t], a: &[modp_t], idx: &[[u16; 2]; 111]) {
-    let mut d: [modp_t; PARAMS_ND] = [0u16; PARAMS_ND];
+fn ringmul_p(d_out: &mut [u16], a: &[u16], idx: &[[u16; 2]; 111]) {
+    let mut d: [u16; PARAMS_ND] = [0u16; PARAMS_ND];
     ringmul_q(&mut d, a, idx);
     d_out.copy_from_slice(&d[0..PARAMS_MU]);
 }
 
 // Creates A random for the given seed and algorithm parameters.
-fn create_A_random(A_random: &mut [modq_t], seed: &[u8]) {
+fn create_A_random(A_random: &mut [u16], seed: &[u8]) {
     let mut shake = crate::sha3::Shake::new(256).unwrap();
     shake.update(&seed[0..PARAMS_KAPPA_BYTES]);
 
@@ -195,7 +193,7 @@ fn create_A_random(A_random: &mut [modq_t], seed: &[u8]) {
 }
 
 // compress ND elements of q bits into p bits and pack into a byte string
-fn pack_q_p(pv: &mut [u8], vq: &[modq_t], rounding_constant: modq_t) {
+fn pack_q_p(pv: &mut [u8], vq: &[u16], rounding_constant: u16) {
     pv.copy_from_slice(&[0; PARAMS_NDP_SIZE]);
 
     for i in 0..PARAMS_ND {
@@ -208,18 +206,18 @@ fn pack_q_p(pv: &mut [u8], vq: &[modq_t], rounding_constant: modq_t) {
     }
 }
 // unpack a byte string into ND elements of p bits
-fn unpack_p(vp: &mut [modp_t], pv: &[u8]) {
+fn unpack_p(vp: &mut [u16], pv: &[u8]) {
     for i in 0..PARAMS_ND {
         let j = PARAMS_P_BITS * i;
-        let mut t = (pv[j >> 3] >> (j % 8)) as modp_t;
+        let mut t = (pv[j >> 3] >> (j % 8)) as u16;
         t |= (pv[(j >> 3) + 1] as u16) << (8 - (j % 8));
-        vp[i] = t & ((PARAMS_P - 1) as modp_t);
+        vp[i] = t & ((PARAMS_P - 1) as u16);
     }
 }
 // generate a keypair (sigma, B)
 fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
-    let mut A: [modq_t; PARAMS_ND] = [0; PARAMS_ND]; // sigma = seed of A
-    let mut B: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
+    let mut A: [u16; PARAMS_ND] = [0; PARAMS_ND]; // sigma = seed of A
+    let mut B: [u16; PARAMS_ND] = [0; PARAMS_ND];
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
     pk[0..PARAMS_KAPPA_BYTES].copy_from_slice(&seed[0..PARAMS_KAPPA_BYTES]);
     // A from sigma
@@ -239,11 +237,11 @@ fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
 }
 
 fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
-    let mut A: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
+    let mut A: [u16; PARAMS_ND] = [0; PARAMS_ND];
     let mut R_idx: [[u16; 2]; 111] = [[0; 2]; 111];
-    let mut U_T: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
-    let mut B: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
-    let mut X: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
+    let mut U_T: [u16; PARAMS_ND] = [0; PARAMS_ND];
+    let mut B: [u16; PARAMS_ND] = [0; PARAMS_ND];
+    let mut X: [u16; PARAMS_MU] = [0; PARAMS_MU];
     // unpack public key
     unpack_p(&mut B, &pk[PARAMS_KAPPA_BYTES..]);
     // A from sigma
@@ -266,8 +264,8 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
         // add message
 
         let tm = (m[i * PARAMS_B_BITS >> 3] >> ((i * PARAMS_B_BITS) % 8)) as u16;
-        t = ((t + ((tm & (1u16 << PARAMS_B_BITS) - 1) << PARAMS_T_BITS - PARAMS_B_BITS)) as modp_t
-            & (1u16 << PARAMS_T_BITS) - 1) as modp_t; // ct = U^T | v
+        t = ((t + ((tm & (1u16 << PARAMS_B_BITS) - 1) << PARAMS_T_BITS - PARAMS_B_BITS)) as u16
+            & (1u16 << PARAMS_T_BITS) - 1) as u16; // ct = U^T | v
 
         ct[(j >> 3)] |= (t << (j & 7)) as u8; // unpack t bits
         ct[(j >> 3) + 1] |= (t >> (8 - (j % 8))) as u8;
@@ -277,19 +275,19 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     let mut S_idx: [[u16; 2]; 111] = [[0; 2]; 111];
     create_secret_vector(&mut S_idx, &sk[0..PARAMS_KAPPA_BYTES]);
 
-    let mut U_T: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
+    let mut U_T: [u16; PARAMS_ND] = [0; PARAMS_ND];
     unpack_p(&mut U_T, ct);
 
-    let mut X_prime: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
+    let mut X_prime: [u16; PARAMS_MU] = [0; PARAMS_MU];
     ringmul_p(&mut X_prime, &U_T, &S_idx);
 
     let mut m1 = vec![0u8; PARAMS_KAPPA_BYTES];
-    let mut v: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
+    let mut v: [u16; PARAMS_MU] = [0; PARAMS_MU];
     for i in 0..PARAMS_MU {
         let j = 8 * PARAMS_NDP_SIZE + PARAMS_T_BITS * i;
         let mut t = (ct[(j >> 3)] >> (j % 8)) as u16;
         t |= (ct[(j >> 3) + 1] as u16) << (8 - (j % 8));
-        v[i] = (t & (1u16 << PARAMS_T_BITS) - 1) as modp_t;
+        v[i] = (t & (1u16 << PARAMS_T_BITS) - 1) as u16;
     }
     // X' = v - X', compressed to 1 bit
     for i in 0..PARAMS_MU {
