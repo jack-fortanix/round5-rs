@@ -239,15 +239,11 @@ fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
 }
 
 fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
-    let mut i: usize = 0;
-    let mut j: usize = 0;
     let mut A: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut R_idx: [[u16; 2]; 111] = [[0; 2]; 111];
     let mut U_T: [modq_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut B: [modp_t; PARAMS_ND] = [0; PARAMS_ND];
     let mut X: [modp_t; PARAMS_MU] = [0; PARAMS_MU];
-    let mut t: modp_t = 0;
-    let mut tm: modp_t = 0;
     // unpack public key
     unpack_p(&mut B, &pk[PARAMS_KAPPA_BYTES..]);
     // A from sigma
@@ -260,13 +256,12 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     ct[PARAMS_NDP_SIZE..PARAMS_MUT_SIZE + PARAMS_NDP_SIZE].copy_from_slice(&[0; PARAMS_MUT_SIZE]);
 
     unsafe {
-    j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
-    i = 0i32 as usize;
-    while i < PARAMS_MU {
+        for i in 0..PARAMS_MU {
+            let j = 8*PARAMS_NDP_SIZE + PARAMS_T_BITS*i;
+        let mut tm: modp_t = 0;
         // compute, pack v
         // compress p->t
-        t = (X[i as usize] as i32 + PARAMS_H2 as i32 >> PARAMS_P_BITS as i32 - PARAMS_T_BITS as i32)
-            as modp_t;
+            let mut t = X[i].wrapping_add(PARAMS_H2) >> (PARAMS_P_BITS - PARAMS_T_BITS);
         // add message
         tm = (m[(i.wrapping_mul(PARAMS_B_BITS) >> 3i32) as usize] as i32
             >> (i.wrapping_mul(PARAMS_B_BITS) & 7)) as modp_t; // pack t bits
@@ -281,8 +276,6 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
                 (*ct.as_mut_ptr().offset((j >> 3i32).wrapping_add(1) as isize) as i32
                     | t as i32 >> (8u8).wrapping_sub(j as u8 & 7)) as u8
         } // X' = S^T * U == U^T * S (mod p)
-        j = (j as u64).wrapping_add(PARAMS_T_BITS as i32 as u64) as usize;
-        i = i.wrapping_add(1)
     }
     }
 }
