@@ -247,11 +247,14 @@ fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
     // unpack public key
     unpack_p(&mut B, &pk[PARAMS_KAPPA_BYTES..]);
     // A from sigma
-    create_A_random(&mut A, &pk); // add error correction code
-                                  // Create R
-    create_secret_vector(&mut R_idx, &rho); // U^T == U = A^T * R == A * R (mod q)
-    ringmul_q(&mut U_T, &A, &R_idx); // X = B^T * R == B * R (mod p)
-    ringmul_p(&mut X, &B, &R_idx); // ct = U^T | v
+    create_A_random(&mut A, &pk);
+    // Create R
+    create_secret_vector(&mut R_idx, &rho);
+    // U^T == U = A^T * R == A * R (mod q)
+    ringmul_q(&mut U_T, &A, &R_idx);
+    // X = B^T * R == B * R (mod p)
+    ringmul_p(&mut X, &B, &R_idx);
+    // ct = U^T | v
     pack_q_p(&mut ct[0..PARAMS_NDP_SIZE], &U_T, PARAMS_H2);
     ct[PARAMS_NDP_SIZE..PARAMS_MUT_SIZE + PARAMS_NDP_SIZE].copy_from_slice(&[0; PARAMS_MUT_SIZE]);
 
