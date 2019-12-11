@@ -530,7 +530,7 @@ unsafe fn r5_cca_kem_encapsulate(
     mut coins: *const u8,
 ) -> i32 {
     let mut hash_in: [u8; 1541] = [0; 1541];
-    let mut L_g_rho: [[u8; 32]; 3] = [[0; 32]; 3];
+    let mut L_g_rho: [[u8; PARAMS_KAPPA_BYTES]; 3] = [[0; PARAMS_KAPPA_BYTES]; 3];
     copy_u8(
         hash_in.as_mut_ptr(),
         coins,
@@ -546,7 +546,7 @@ unsafe fn r5_cca_kem_encapsulate(
     shake256(
         L_g_rho.as_mut_ptr() as *mut u8,
         (3i32 * PARAMS_KAPPA_BYTES as i32) as usize,
-        hash_in.as_mut_ptr(),
+        hash_in.as_ptr(),
         (PARAMS_KAPPA_BYTES as i32 + PARAMS_PK_SIZE as i32) as usize,
     );
     /* Encrypt  */
@@ -609,61 +609,53 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
     round5_dem(&mut ct[c1_len..], &k, &msg);
     return ct;
 }
-unsafe fn r5_cca_kem_decapsulate(mut k: *mut u8, mut ct: *const u8, mut sk: *const u8) -> i32 {
+unsafe fn r5_cca_kem_decapsulate(k: &mut [u8], ct: &[u8], sk: &[u8]) -> i32 {
     let mut hash_in: [u8; 1541] = [0; 1541];
     let mut m_prime: [u8; 32] = [0; 32];
     let mut L_g_rho_prime: [[u8; 32]; 3] = [[0; 32]; 3];
     let mut ct_prime: [u8; 1509] = [0; 1509];
-    r5_cpa_pke_decrypt(m_prime.as_mut_ptr(), sk, ct);
-    copy_u8(
-        hash_in.as_mut_ptr(),
-        m_prime.as_mut_ptr(),
-        PARAMS_KAPPA_BYTES,
-    );
-    copy_u8(
-        hash_in
-            .as_mut_ptr()
-            .offset(PARAMS_KAPPA_BYTES as isize),
-        sk.offset(PARAMS_KAPPA_BYTES as isize)
-            .offset(PARAMS_KAPPA_BYTES as isize),
-        PARAMS_PK_SIZE,
-    );
+    r5_cpa_pke_decrypt(m_prime.as_mut_ptr(), sk.as_ptr(), ct.as_ptr());
+
+    hash_in[0..PARAMS_KAPPA_BYTES].copy_from_slice(&m_prime[0..PARAMS_KAPPA_BYTES]);
+
+    hash_in[PARAMS_KAPPA_BYTES..PARAMS_KAPPA_BYTES+PARAMS_PK_SIZE].copy_from_slice(
+        &sk[2*PARAMS_KAPPA_BYTES..]);
+
     shake256(
         L_g_rho_prime.as_mut_ptr() as *mut u8,
         (3i32 * PARAMS_KAPPA_BYTES as i32) as usize,
-        hash_in.as_mut_ptr(),
-        (PARAMS_KAPPA_BYTES as i32 + PARAMS_PK_SIZE as i32) as usize,
+        hash_in.as_ptr(),
+        PARAMS_KAPPA_BYTES + PARAMS_PK_SIZE,
     );
     // Encrypt m: ct' = (U',v')
     r5_cpa_pke_encrypt(
         ct_prime.as_mut_ptr(),
-        sk.offset(PARAMS_KAPPA_BYTES as isize)
-            .offset(PARAMS_KAPPA_BYTES as isize),
+        sk.as_ptr().offset(2*PARAMS_KAPPA_BYTES as isize),
         m_prime.as_mut_ptr(),
-        L_g_rho_prime[2].as_mut_ptr(),
+        L_g_rho_prime[2].as_ptr(),
     );
     // ct' = (U',v',g')
     copy_u8(
         ct_prime.as_mut_ptr().offset(PARAMS_CT_SIZE as isize),
-        L_g_rho_prime[1].as_mut_ptr(),
+        L_g_rho_prime[1].as_ptr(),
         PARAMS_KAPPA_BYTES,
     );
     // k = H(L', ct')
     copy_u8(
         hash_in.as_mut_ptr(),
-        L_g_rho_prime[0].as_mut_ptr(),
+        L_g_rho_prime[0].as_ptr(),
         PARAMS_KAPPA_BYTES,
     );
     // verification ok ?
     let fail: u8 = constant_time_memcmp(
-        ct as *const libc::c_void,
+        ct.as_ptr() as *const libc::c_void,
         ct_prime.as_mut_ptr() as *const libc::c_void,
         (PARAMS_CT_SIZE as i32 + PARAMS_KAPPA_BYTES as i32) as usize,
     ) as u8;
     // k = H(y, ct') depending on fail state
     conditional_constant_time_memcpy(
         hash_in.as_mut_ptr() as *mut libc::c_void,
-        sk.offset(PARAMS_KAPPA_BYTES as isize) as *const libc::c_void,
+        sk.as_ptr().offset(PARAMS_KAPPA_BYTES as isize) as *const libc::c_void,
         PARAMS_KAPPA_BYTES,
         fail,
     );
@@ -675,9 +667,9 @@ unsafe fn r5_cca_kem_decapsulate(mut k: *mut u8, mut ct: *const u8, mut sk: *con
         (PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES) as usize,
     );
     shake256(
-        k,
+        k.as_mut_ptr(),
         PARAMS_KAPPA_BYTES,
-        hash_in.as_mut_ptr(),
+        hash_in.as_ptr(),
         PARAMS_KAPPA_BYTES  + PARAMS_CT_SIZE  + PARAMS_KAPPA_BYTES,
     );
     return 0i32;
@@ -693,7 +685,7 @@ pub fn decrypt(ctext: &[u8], sk: &[u8]) -> Vec<u8> {
     /* Determine k */
     let mut k: [u8; 32] = [0; 32];
     unsafe {
-        r5_cca_kem_decapsulate(k.as_mut_ptr(), ctext.as_ptr(), sk.as_ptr());
+        r5_cca_kem_decapsulate(&mut k, &ctext[0..c1_len], sk);
     }
     /* Apply DEM-inverse to get m */
 
