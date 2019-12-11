@@ -29,7 +29,7 @@ fn constant_time_memcmp(a: &[u8], b: &[u8]) -> u8 {
     z = (z >> 4) | (z & 0x0F); // fold top/bottom 4 bits of 8
     z = (z >> 2) | (z & 0x03); // fold top/bottom 2 bits of 4
     z = (z >> 1) | (z & 0x01); // fold top/bottom 1 bit of 2
-    // map 1 -> 0xff, 0 -> 0
+                               // map 1 -> 0xff, 0 -> 0
     z = 0 - z;
     return z;
 }
@@ -115,7 +115,7 @@ fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
                     shake.expand(&mut output);
                     index = 0;
                 }
-                x = (output[index] as u16) | ((output[index+1] as u16) << 8);
+                x = (output[index] as u16) | ((output[index + 1] as u16) << 8);
                 index += 2;
                 if x < PARAMS_RS_LIM {
                     break;
@@ -147,7 +147,7 @@ fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
 
         let mut k = idx[i][0] as usize;
         d[0] = d[0].wrapping_add(p[k]);
-        let mut j : usize = 1;
+        let mut j: usize = 1;
         while k > 0 {
             k -= 1;
             d[j] = d[j].wrapping_add(p[k]);
@@ -177,7 +177,7 @@ fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
     // "unlift"
     d[0] = -(d[0] as i16) as u16;
     for i in 1..PARAMS_ND {
-        d[i] = d[i-1].wrapping_sub(d[i]);
+        d[i] = d[i - 1].wrapping_sub(d[i]);
     }
 }
 // multiplication mod p, result length mu
@@ -252,7 +252,7 @@ fn create_A_random(A_random: &mut [modq_t], seed: &[u8]) {
     let xof = shake.finalize(A_random.len() * 2);
 
     for i in 0..A_random.len() {
-        A_random[i] = (xof[2*i] as u16) | ((xof[2*i+1] as u16) << 8);
+        A_random[i] = (xof[2 * i] as u16) | ((xof[2 * i + 1] as u16) << 8);
     }
 }
 
@@ -262,7 +262,8 @@ fn pack_q_p(pv: &mut [u8], vq: &[modq_t], rounding_constant: modq_t) {
 
     for i in 0..PARAMS_ND {
         let j = i * PARAMS_P_BITS;
-        let t = (vq[i].wrapping_add(rounding_constant) >> (PARAMS_Q_BITS - PARAMS_P_BITS)) & (PARAMS_P - 1) as u16;
+        let t = (vq[i].wrapping_add(rounding_constant) >> (PARAMS_Q_BITS - PARAMS_P_BITS))
+            & (PARAMS_P - 1) as u16;
 
         pv[j >> 3] = pv[j >> 3] | ((t << (j % 8)) as u8);
         pv[(j >> 3) + 1] = pv[(j >> 3) + 1] | ((t >> (8 - (j % 8))) as u8);
@@ -292,7 +293,11 @@ fn r5_cpa_pke_keygen(pk: &mut [u8], sk: &mut [u8], seed: &[u8]) {
     ringmul_q(&mut B, &A, &S_idx);
 
     // Compress B q_bits -> p_bits, pk = sigma | B
-    pack_q_p(&mut pk[PARAMS_KAPPA_BYTES..PARAMS_NDP_SIZE+PARAMS_KAPPA_BYTES], &B, PARAMS_H1);
+    pack_q_p(
+        &mut pk[PARAMS_KAPPA_BYTES..PARAMS_NDP_SIZE + PARAMS_KAPPA_BYTES],
+        &B,
+        PARAMS_H1,
+    );
 }
 
 unsafe fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8]) {
@@ -309,12 +314,12 @@ unsafe fn r5_cpa_pke_encrypt(mut ct: &mut [u8], pk: &[u8], m: &[u8], rho: &[u8])
     unpack_p(&mut B, &pk[PARAMS_KAPPA_BYTES..]);
     // A from sigma
     create_A_random(&mut A, &pk); // add error correction code
-    // Create R
+                                  // Create R
     create_secret_vector(&mut R_idx, &rho); // U^T == U = A^T * R == A * R (mod q)
     ringmul_q(&mut U_T, &A, &R_idx); // X = B^T * R == B * R (mod p)
     ringmul_p(X.as_mut_ptr(), B.as_mut_ptr(), R_idx.as_mut_ptr()); // ct = U^T | v
     pack_q_p(&mut ct[0..PARAMS_NDP_SIZE], &U_T, PARAMS_H2);
-    ct[PARAMS_NDP_SIZE..PARAMS_MUT_SIZE+PARAMS_NDP_SIZE].copy_from_slice(&[0; PARAMS_MUT_SIZE]);
+    ct[PARAMS_NDP_SIZE..PARAMS_MUT_SIZE + PARAMS_NDP_SIZE].copy_from_slice(&[0; PARAMS_MUT_SIZE]);
     j = (8i32 * PARAMS_NDP_SIZE as i32) as usize;
     i = 0i32 as usize;
     while i < PARAMS_MU {
@@ -453,7 +458,7 @@ fn r5_cca_kem_encapsulate(mut ct: &mut [u8], pk: &[u8], coins: &[u8]) -> Vec<u8>
     let L_g_rho = shake.finalize(3 * PARAMS_KAPPA_BYTES);
 
     unsafe {
-        r5_cpa_pke_encrypt(&mut ct, pk, coins, &L_g_rho[2*PARAMS_KAPPA_BYTES..]);
+        r5_cpa_pke_encrypt(&mut ct, pk, coins, &L_g_rho[2 * PARAMS_KAPPA_BYTES..]);
     }
 
     /* Append g: ct = (U,v,g) */
@@ -487,18 +492,25 @@ fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
 
     let mut shake = crate::sha3::Shake::new(256).unwrap();
     shake.update(&coins[0..PARAMS_KAPPA_BYTES]);
-    shake.update(&sk[2*PARAMS_KAPPA_BYTES..]);
-    let L_g_rho_prime = shake.finalize(3*PARAMS_KAPPA_BYTES);
+    shake.update(&sk[2 * PARAMS_KAPPA_BYTES..]);
+    let L_g_rho_prime = shake.finalize(3 * PARAMS_KAPPA_BYTES);
 
-    let mut ct_prime: [u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES] = [0; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES];
+    let mut ct_prime: [u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES] =
+        [0; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES];
 
     // Encrypt m: ct' = (U',v')
     unsafe {
-        r5_cpa_pke_encrypt(&mut ct_prime, &sk[2*PARAMS_KAPPA_BYTES..], &coins, &L_g_rho_prime[2*PARAMS_KAPPA_BYTES..]);
+        r5_cpa_pke_encrypt(
+            &mut ct_prime,
+            &sk[2 * PARAMS_KAPPA_BYTES..],
+            &coins,
+            &L_g_rho_prime[2 * PARAMS_KAPPA_BYTES..],
+        );
     }
 
     // ct' = (U',v',g')
-    ct_prime[PARAMS_CT_SIZE..].copy_from_slice(&L_g_rho_prime[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES]);
+    ct_prime[PARAMS_CT_SIZE..]
+        .copy_from_slice(&L_g_rho_prime[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES]);
     // k = H(L', ct')
 
     // verification ok ?
@@ -507,7 +519,11 @@ fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
 
     let mut hash_in: [u8; PARAMS_KAPPA_BYTES] = [0; PARAMS_KAPPA_BYTES];
     hash_in.copy_from_slice(&L_g_rho_prime[0..PARAMS_KAPPA_BYTES]);
-    conditional_constant_time_memcpy(&mut hash_in, &sk[PARAMS_KAPPA_BYTES..2*PARAMS_KAPPA_BYTES], fail);
+    conditional_constant_time_memcpy(
+        &mut hash_in,
+        &sk[PARAMS_KAPPA_BYTES..2 * PARAMS_KAPPA_BYTES],
+        fail,
+    );
 
     shake.update(&hash_in);
     shake.update(&ct_prime);

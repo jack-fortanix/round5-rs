@@ -1,16 +1,14 @@
-
 extern crate keccak;
 
 use std::cmp;
 
 fn absorb(mut state: &mut [u64; 25], state_idx: usize, rate: usize, input: &[u8]) -> usize {
-
     fn u64_from_le(b: &[u8]) -> u64 {
-        let mut r : u64 = 0;
+        let mut r: u64 = 0;
 
         for i in 0..8 {
             r <<= 8;
-            r += b[7-i] as u64;
+            r += b[7 - i] as u64;
         }
         r
     }
@@ -28,21 +26,21 @@ fn absorb(mut state: &mut [u64; 25], state_idx: usize, rate: usize, input: &[u8]
         let mut avail = cmp::min(input_len - ipos, rate / 8 - spos);
 
         while avail > 0 && spos % 8 != 0 {
-            state[spos/8] ^= (input[ipos] as u64) << (8 * (spos % 8));
+            state[spos / 8] ^= (input[ipos] as u64) << (8 * (spos % 8));
             spos += 1;
             ipos += 1;
             avail -= 1;
         }
 
         while avail >= 8 {
-            state[spos/8] ^= u64_from_le(&input[ipos..ipos+8]);
+            state[spos / 8] ^= u64_from_le(&input[ipos..ipos + 8]);
             spos += 8;
             ipos += 8;
             avail -= 8;
         }
 
         while avail > 0 {
-            state[spos/8] ^= (input[ipos] as u64) << (8 * (spos % 8));
+            state[spos / 8] ^= (input[ipos] as u64) << (8 * (spos % 8));
             spos += 1;
             ipos += 1;
             avail -= 1;
@@ -58,8 +56,8 @@ fn absorb(mut state: &mut [u64; 25], state_idx: usize, rate: usize, input: &[u8]
 }
 
 fn finish(mut state: &mut [u64; 25], idx: usize, rate: usize, init: u8, fini: u8) {
-    state[idx/8] ^= (init as u64) << (8 * (idx % 8));
-    state[(rate/64)-1] ^= (fini as u64) << 56;
+    state[idx / 8] ^= (init as u64) << (8 * (idx % 8));
+    state[(rate / 64) - 1] ^= (fini as u64) << 56;
     keccak::f1600(&mut state);
 }
 
@@ -75,12 +73,12 @@ impl Sha3 {
             return Err("Unknown SHA-3 digest len".into());
         }
 
-        let rate = 1600 - 2*outlen;
+        let rate = 1600 - 2 * outlen;
 
         Ok(Sha3 {
             state: [0u64; 25],
             idx: 0,
-            rate: rate
+            rate: rate,
         })
     }
 
@@ -93,10 +91,10 @@ impl Sha3 {
         finish(&mut self.state, self.idx, self.rate, 0x06, 0x80);
 
         let outbits = (1600 - self.rate) / 2;
-        let mut out = vec![0u8; outbits/8];
+        let mut out = vec![0u8; outbits / 8];
 
         for i in 0..out.len() {
-            out[i] = (self.state[i / 8] >> (8*(i % 8))) as u8;
+            out[i] = (self.state[i / 8] >> (8 * (i % 8))) as u8;
         }
 
         *self = Sha3::new(outbits).unwrap();
@@ -111,7 +109,7 @@ fn expand(mut state: &mut [u64; 25], rate: usize, out: &mut [u8]) {
 
     for chunk in out.chunks_mut(rate) {
         for i in 0..chunk.len() {
-            chunk[i] = (state[i / 8] >> (8*(i % 8))) as u8;
+            chunk[i] = (state[i / 8] >> (8 * (i % 8))) as u8;
         }
 
         keccak::f1600(&mut state);
@@ -133,7 +131,7 @@ impl Shake {
         Ok(Shake {
             state: [0u64; 25],
             idx: 0,
-            rate: 1600-2*level
+            rate: 1600 - 2 * level,
         })
     }
 
@@ -170,7 +168,7 @@ impl ShakeXof {
         let mut shake = ShakeXof {
             state: [0u64; 25],
             idx: 0,
-            rate: 1600-2*level
+            rate: 1600 - 2 * level,
         };
 
         let new_idx = absorb(&mut shake.state, shake.idx, shake.rate, input);
@@ -186,12 +184,10 @@ impl ShakeXof {
 
         for chunk in output.chunks_mut(rate) {
             for i in 0..chunk.len() {
-                chunk[i] = (self.state[i / 8] >> (8*(i % 8))) as u8;
+                chunk[i] = (self.state[i / 8] >> (8 * (i % 8))) as u8;
             }
 
             keccak::f1600(&mut self.state);
         }
-
     }
 }
-
