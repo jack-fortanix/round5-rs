@@ -89,18 +89,17 @@ fn probe_cm(v: &mut [u64], x: u16) -> bool {
 fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
     let mut v: [u64; PROBEVEC64] = [0; PROBEVEC64];
 
-    let mut shake = crate::sha3::ShakeXof::new(256, seed).unwrap();
+    let mut shake = crate::sha3::Shake::new(256).unwrap();
+    shake.update(seed);
 
-    let mut index: usize = SHAKE256_RATE;
-    let mut output: [u8; SHAKE256_RATE] = [0u8; SHAKE256_RATE];
+    let output = shake.finalize(4*SHAKE256_RATE);
+
+    let mut index = 0;
+
     for i in 0..PARAMS_H {
         let mut x: u16;
         loop {
             loop {
-                if index >= SHAKE256_RATE {
-                    shake.expand(&mut output);
-                    index = 0;
-                }
                 x = (output[index] as u16) | ((output[index + 1] as u16) << 8);
                 index += 2;
                 if x < PARAMS_RS_LIM {
@@ -294,10 +293,11 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
 }
 
 fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) {
-    let mut shake = crate::sha3::ShakeXof::new(256, &key).unwrap();
+    let mut shake = crate::sha3::Shake::new(256).unwrap();
 
-    let mut key_and_iv = vec![0; 32 + 12];
-    shake.expand(&mut key_and_iv);
+    shake.update(key);
+
+    let key_and_iv = shake.finalize(32 + 12);
 
     let cipher =
         Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256).unwrap();
@@ -315,10 +315,11 @@ fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) {
 }
 
 fn round5_dem_inverse(ctext: &[u8], key: &[u8]) -> Vec<u8> {
-    let mut shake = crate::sha3::ShakeXof::new(256, &key).unwrap();
+    let mut shake = crate::sha3::Shake::new(256).unwrap();
 
-    let mut key_and_iv = vec![0; 32 + 12];
-    shake.expand(&mut key_and_iv);
+    shake.update(key);
+
+    let key_and_iv = shake.finalize(32 + 12);
 
     let cipher =
         Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256).unwrap();
