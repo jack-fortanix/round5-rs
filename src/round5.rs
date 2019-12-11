@@ -136,7 +136,7 @@ fn create_secret_vector(idx: &mut [[u16; 2]; 111], seed: &[u8]) {
     }
 }
 // multiplication mod q, result length n
-unsafe fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
+fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
     let mut p: [modq_t; 1171] = [0; 1171];
     // Note: order of coefficients a[1..n] is reversed!
     // "lift" -- multiply by (x - 1)
@@ -150,40 +150,40 @@ unsafe fn ringmul_q(d: &mut [modq_t], a: &[modq_t], idx: &[[u16; 2]; 111]) {
     // Initialize result
     for i in 0..(PARAMS_H / 2) {
         // Modified to always scan the same ranges
-        let mut k = (*idx.as_ptr().offset(i as isize))[0] as usize; // positive coefficients
-        *d.as_mut_ptr().offset(0) = (*d.as_mut_ptr().offset(0) as i32 + p[k as usize] as i32) as modq_t; // negative coefficients
-        let mut j = 1i32 as usize;
+
+        let mut k = idx[i][0] as usize;
+        d[0] = d[0].wrapping_add(p[k]);
+        let mut j : usize = 1;
         while k > 0 {
-            k = k.wrapping_sub(1);
-            *d.as_mut_ptr().offset(j as isize) = (*d.as_mut_ptr().offset(j as isize) as i32 + p[k as usize] as i32) as modq_t;
-            j = j.wrapping_add(1)
+            k -= 1;
+            d[j] = d[j].wrapping_add(p[k]);
+            j += 1;
         }
-        k = (PARAMS_ND as i32 + 1i32) as usize;
+        k = PARAMS_ND + 1;
         while j < PARAMS_ND {
-            k = k.wrapping_sub(1);
-            *d.as_mut_ptr().offset(j as isize) = (*d.as_mut_ptr().offset(j as isize) as i32 + p[k as usize] as i32) as modq_t;
-            j = j.wrapping_add(1)
+            k -= 1;
+            d[j] = d[j].wrapping_add(p[k]);
+            j += 1;
         }
-        k = (*idx.as_ptr().offset(i as isize))[1] as usize;
-        *d.as_mut_ptr().offset(0) = (*d.as_mut_ptr().offset(0) as i32 - p[k as usize] as i32) as modq_t;
-        j = 1i32 as usize;
+        k = idx[i][1] as usize;
+        d[0] = d[0].wrapping_sub(p[k]);
+        j = 1;
         while k > 0 {
-            k = k.wrapping_sub(1);
-            *d.as_mut_ptr().offset(j as isize) = (*d.as_mut_ptr().offset(j as isize) as i32 - p[k as usize] as i32) as modq_t;
-            j = j.wrapping_add(1)
+            k -= 1;
+            d[j] = d[j].wrapping_sub(p[k]);
+            j += 1;
         }
-        k = (PARAMS_ND as i32 + 1i32) as usize;
+        k = PARAMS_ND + 1;
         while j < PARAMS_ND {
-            k = k.wrapping_sub(1);
-            *d.as_mut_ptr().offset(j as isize) = (*d.as_mut_ptr().offset(j as isize) as i32 - p[k as usize] as i32) as modq_t;
-            j = j.wrapping_add(1)
+            k -= 1;
+            d[j] = d[j].wrapping_sub(p[k]);
+            j += 1;
         }
     }
     // "unlift"
-    *d.as_mut_ptr().offset(0) = -(*d.as_mut_ptr().offset(0) as i32) as u16;
+    d[0] = -(d[0] as i16) as u16;
     for i in 1..PARAMS_ND {
-        *d.as_mut_ptr().offset(i as isize) =
-            (*d.as_mut_ptr().offset(i.wrapping_sub(1) as isize) as i32 - *d.as_mut_ptr().offset(i as isize) as i32) as u16;
+        d[i] = d[i-1].wrapping_sub(d[i]);
     }
 }
 // multiplication mod p, result length mu
