@@ -77,16 +77,15 @@ pub fn all_kats() {
         assert_eq!(sk.to_hex(), kat.sk.to_hex());
         assert_eq!(pk.to_hex(), kat.pk.to_hex());
 
-        let ctext = encrypt(&kat.msg, &kat.pk, &kat.enc_coins);
+        let ctext = encrypt(&kat.msg, &kat.pk, &kat.enc_coins).unwrap();
 
         assert_eq!(ctext.len(), kat.clen);
         assert_eq!(ctext.to_hex(), kat.ctext.to_hex());
 
-        let recovered = decrypt(&ctext, &kat.sk);
+        let recovered = decrypt(&ctext, &kat.sk).unwrap();
 
         assert_eq!(recovered.to_hex(), kat.msg.to_hex());
 
-        /*
         let mut invalid_ctext = ctext.clone();
 
         let idx = ((ctext[30] as usize)*239+ctext[32] as usize) % ctext.len();
@@ -95,17 +94,8 @@ pub fn all_kats() {
         let result = decrypt(&invalid_ctext, &kat.sk);
 
         match result {
-            Err(Error::DecryptionFailed) => { }
-            Err(_) => { panic!("Unexpected error") }
+            Err(_) => { }
             Ok(r) => { assert_eq!(r.to_hex(), kat.msg.to_hex()); }
-
-        assert_eq!(result.len(), 0);
-
-        if result.len() > 0 {
-            assert_eq!(result.to_hex(), kat.msg.to_hex());
-        } else {
-            assert_eq!(result.len(), 0);
         }
-         */
     }
 }

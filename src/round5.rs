@@ -17,8 +17,9 @@ fn constant_time_memcmp(a: &[u8], b: &[u8]) -> u8 {
     z = (z >> 4) | (z & 0x0F); // fold top/bottom 4 bits of 8
     z = (z >> 2) | (z & 0x03); // fold top/bottom 2 bits of 4
     z = (z >> 1) | (z & 0x01); // fold top/bottom 1 bit of 2
-                               // map 1 -> 0xff, 0 -> 0
-    z = 0 - z;
+
+    // now map 1 -> 0xff and 0 -> 0
+    z = 0u8.wrapping_sub(z);
     return z;
 }
 
@@ -292,7 +293,7 @@ fn r5_cpa_pke_decrypt(sk: &[u8], ct: &[u8]) -> Vec<u8> {
     return m1;
 }
 
-fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) {
+fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) -> Result<(), mbedtls::Error> {
     let mut shake = crate::sha3::Shake::new(256).unwrap();
 
     shake.update(key);
@@ -300,21 +301,21 @@ fn round5_dem(mut out: &mut [u8], key: &[u8], msg: &[u8]) {
     let key_and_iv = shake.finalize(32 + 12);
 
     let cipher =
-        Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256).unwrap();
+        Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256)?;
     let cipher = cipher
-        .set_key_iv(&key_and_iv[0..32], &key_and_iv[32..])
-        .unwrap();
+        .set_key_iv(&key_and_iv[0..32], &key_and_iv[32..])?;
 
     let ad = vec![];
 
     let mut tag = vec![0; DEM_TAG_LEN];
 
-    cipher.encrypt_auth(&ad, &msg, &mut out, &mut tag).unwrap();
+    cipher.encrypt_auth(&ad, &msg, &mut out, &mut tag)?;
 
     out[msg.len()..].copy_from_slice(&tag);
+    Ok(())
 }
 
-fn round5_dem_inverse(ctext: &[u8], key: &[u8]) -> Vec<u8> {
+fn round5_dem_inverse(ctext: &[u8], key: &[u8]) -> Result<Vec<u8>, mbedtls::Error> {
     let mut shake = crate::sha3::Shake::new(256).unwrap();
 
     shake.update(key);
@@ -322,18 +323,18 @@ fn round5_dem_inverse(ctext: &[u8], key: &[u8]) -> Vec<u8> {
     let key_and_iv = shake.finalize(32 + 12);
 
     let cipher =
-        Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256).unwrap();
+        Cipher::<_, Authenticated, _>::new(raw::CipherId::Aes, raw::CipherMode::GCM, 256)?;
     let cipher = cipher
         .set_key_iv(&key_and_iv[0..32], &key_and_iv[32..])
-        .unwrap();
+        ?;
 
     let ad = vec![];
     let mut ptext = vec![0; ctext.len() - DEM_TAG_LEN];
     let tag = &ctext[ctext.len() - DEM_TAG_LEN..];
     let ctext = &ctext[0..ctext.len() - DEM_TAG_LEN];
-    cipher.decrypt_auth(&ad, ctext, &mut ptext, tag).unwrap();
+    cipher.decrypt_auth(&ad, ctext, &mut ptext, tag)?;
 
-    ptext
+    Ok(ptext)
 }
 
 pub fn gen_keypair(coins: &[u8]) -> (Vec<u8>, Vec<u8>) {
@@ -369,9 +370,9 @@ fn r5_cca_kem_encapsulate(mut ct: &mut [u8], pk: &[u8], coins: &[u8]) -> Vec<u8>
     return shake.finalize(PARAMS_KAPPA_BYTES);
 }
 
-pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
+pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Result<Vec<u8>, mbedtls::Error> {
     if coins.len() != 32 {
-        return Vec::new();
+        return Err(mbedtls::Error::PkBadInputData);
     }
 
     let mut ct = vec![0u8; PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES + msg.len() + DEM_TAG_LEN];
@@ -381,8 +382,8 @@ pub fn encrypt(msg: &[u8], pk: &[u8], coins: &[u8]) -> Vec<u8> {
     let k = r5_cca_kem_encapsulate(&mut ct[0..c1_len], pk, coins);
 
     /* Apply DEM to get second part of ct */
-    round5_dem(&mut ct[c1_len..], &k, &msg);
-    return ct;
+    round5_dem(&mut ct[c1_len..], &k, &msg)?;
+    Ok(ct)
 }
 
 fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
@@ -426,11 +427,11 @@ fn r5_cca_kem_decapsulate(ct: &[u8], sk: &[u8]) -> Vec<u8> {
     return shake.finalize(PARAMS_KAPPA_BYTES);
 }
 
-pub fn decrypt(ctext: &[u8], sk: &[u8]) -> Vec<u8> {
+pub fn decrypt(ctext: &[u8], sk: &[u8]) -> Result<Vec<u8>, mbedtls::Error> {
     let c1_len = PARAMS_CT_SIZE + PARAMS_KAPPA_BYTES;
 
     if ctext.len() < c1_len + DEM_TAG_LEN {
-        return vec![]; // error
+        return Err(mbedtls::Error::PkBadInputData);
     }
 
     /* Determine k */
